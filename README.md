@@ -95,3 +95,5 @@ node .\tools\worker\list-provider-models.cjs
 ```
 
 배포용 기본 흐름은 `tools\PZAITranslatorHelper.vbs`를 더블 클릭하는 것입니다. 같은 폴더의 감시 워커가 **숨김 창**으로 단일 인스턴스 실행됩니다. 그 뒤 게임의 `Queue translation`을 누르면 `Zomboid\Lua`에 요청을 쓰고, Helper가 설정된 API 키를 읽어 번역팩을 설치합니다. 상태는 `Zomboid\Lua\PZAITranslator_status.ini`에 기록됩니다. 이 보조 프로세스는 게임 밖에서만 API를 호출하므로 게임 Lua에 HTTP/프로세스 실행 권한을 요구하지 않습니다.
+
+Helper를 종료하려면 같은 폴더의 `Stop-PZAITranslatorHelper.vbs`를 더블 클릭합니다. 이 종료 파일은 `watch-translation-jobs.ps1`으로 실행된 Helper만 종료하며, 사용자가 열어 둔 다른 PowerShell 창은 건드리지 않습니다.
