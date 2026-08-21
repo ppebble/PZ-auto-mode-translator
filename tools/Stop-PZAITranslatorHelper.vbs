@@ -9,7 +9,7 @@ stopped = 0
 
 For Each process In processes
     commandLine = LCase(process.CommandLine & "")
-    If InStr(commandLine, "\\watch-translation-jobs.ps1") > 0 Then
+    If InStr(commandLine, "\watch-translation-jobs.ps1") > 0 Then
         process.Terminate
         stopped = stopped + 1
     End If

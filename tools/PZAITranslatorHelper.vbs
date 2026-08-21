@@ -19,7 +19,7 @@ Set processes = service.ExecQuery("SELECT * FROM Win32_Process WHERE Name = 'pow
 running = False
 For Each process In processes
     commandLine = LCase(process.CommandLine & "")
-    If InStr(commandLine, "\\watch-translation-jobs.ps1") > 0 Then
+    If InStr(commandLine, "\watch-translation-jobs.ps1") > 0 Then
         running = True
         Exit For
     End If
