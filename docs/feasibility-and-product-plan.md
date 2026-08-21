@@ -129,6 +129,17 @@ B42 번역 파일은 UTF-8 JSON이고, 엔진이 인식하는 고정 category �
 4. 게임 FPS와 console.txt 확인
 5. 직접 네트워크 호출이 불안정하면 local worker를 정식 사용
 
+### Experiment D 결과 (B42.20.3 실측)
+
+`PZAITranslatorHttpProbe.lua`를 실제 게임에서 로드해 확인한 결과는 다음과 같다.
+
+```text
+PZAITranslator: HTTP_PROBE_FILE_LOADED
+PZAITranslator: HTTP_PROBE=NO_LUAJAVA
+```
+
+게임 JAR에는 OkHttp 라이브러리가 포함되어 있지만 Workshop Lua의 Kahlua 환경에는 `luajava` 브리지가 노출되지 않는다. 따라서 모드 Lua가 OkHttp/Java 클래스를 호출해 API 요청을 보내거나 외부 프로세스를 시작하는 방식은 사용할 수 없다. v1의 정식 경로는 숨김 창으로 실행되는 단일 인스턴스 `PZAITranslatorHelper.vbs` + Node worker다.
+
 ## 제품 기획 v1
 
 ### 화면

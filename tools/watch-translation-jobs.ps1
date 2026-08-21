@@ -16,6 +16,7 @@ $job = Join-Path $lua 'PZAITranslator_job.ini'
 $providerIni = Join-Path $lua 'PZAITranslator_provider.ini'
 $providerJson = Join-Path $root 'runtime\provider-from-game.json'
 $status = Join-Path $lua 'PZAITranslator_status.ini'
+$lock = Join-Path $lua 'PZAITranslator_helper.lock'
 
 function Read-Ini([string]$Path) {
     $result = @{}
@@ -30,8 +31,26 @@ function Write-Status([string]$State, [string]$Message) {
 }
 
 New-Item -ItemType Directory -Force -Path $lua, (Split-Path $providerJson -Parent) | Out-Null
-Write-Host "Watching $job (Ctrl+C to stop)."
-while ($true) {
+
+# FileShare.None makes the helper single-instance without relying on a stale PID
+# file. Windows releases the handle automatically if the helper crashes.
+try {
+    $lockStream = [System.IO.File]::Open($lock, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+} catch [System.IO.IOException] {
+    Write-Host 'PZ AI Translator Helper is already running.'
+    exit 0
+}
+
+try {
+    $lockStream.SetLength(0)
+    $lockText = "pid=$PID`nstartedAt=$([DateTime]::UtcNow.ToString('o'))`n"
+    $lockBytes = [System.Text.Encoding]::UTF8.GetBytes($lockText)
+    $lockStream.Write($lockBytes, 0, $lockBytes.Length)
+    $lockStream.Flush()
+    Write-Status 'idle' 'PZ AI Translator Helper is ready.'
+    Write-Host "Watching $job (Ctrl+C to stop)."
+
+    while ($true) {
     if (-not (Test-Path -LiteralPath $job)) { Start-Sleep -Seconds $PollSeconds; continue }
     try {
         $request = Read-Ini $job
@@ -72,4 +91,8 @@ while ($true) {
         # provider quota or hide the original error behind a rapid status loop.
         if (Test-Path -LiteralPath $job) { Move-Item -LiteralPath $job -Destination ($job + '.failed') -Force }
     }
+    }
+} finally {
+    if ($null -ne $lockStream) { $lockStream.Dispose() }
+    Remove-Item -LiteralPath $lock -Force -ErrorAction SilentlyContinue
 }

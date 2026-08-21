@@ -9,7 +9,7 @@ Project Zomboid **Build 42 Stable 42.20.x 이상 전용** 자동 번역 모드 �
 - 기존 번역 시스템 및 자동 번역 파이프라인 조사 문서: [`docs/translation-research.md`](docs/translation-research.md)
 - 구현 설계/단계: [`docs/design.md`](docs/design.md)
 - 로컬 실행 설정 예시: [`config/provider.example.json`](config/provider.example.json)
-- B42.20.3의 활성 모드 111개를 실제 스캔해 번역 후보 732개를 확인했습니다.
+- B42.20.3의 활성 모드를 실제 스캔해 번역 후보와 기존 번역 여부를 확인합니다.
 - 스캔 → 규칙 적용 → AI 호출 → placeholder 검증 → 별도 JSON 번역팩 생성 워커를 구현했습니다.
 
 ## 안전 원칙
@@ -68,7 +68,7 @@ node .\tools\worker\scan-b42.cjs `
 .\tools\run-translation.ps1 -Install
 ```
 
-완료 뒤 새 번역팩 `PZAITranslationGenerated`를 활성화하고 게임을 **재시작**합니다. 게임 안의 `Mod Options → PZ AI Translator → Queue translation` 버튼은 설정을 저장하고 로컬 작업 요청 파일을 만드는 연결점입니다. 게임 Lua는 외부 Node 프로세스를 직접 실행할 수 없으므로, 현재 MVP에서는 위 PowerShell 워커를 실행해 요청을 처리합니다.
+완료 뒤 새 번역팩 `PZAITranslationGenerated`를 활성화하고 메인 메뉴로 나갔다가 월드에 다시 들어갑니다. 게임 안의 `Mod Options → PZ AI Translator → Queue translation` 버튼은 설정을 저장하고 로컬 작업 요청 파일을 만드는 연결점입니다. 게임 Lua는 외부 Node 프로세스를 직접 실행할 수 없으므로, 번역은 외부 Helper가 처리합니다.
 
 생성할 언어는 게임의 현재 표시 언어와 같아야 적용됩니다. 예를 들어 게임이 한국어(`KO`)면 `KO` 번역팩만 로드하며, 일본어 번역을 보려면 `JP`로 생성한 뒤 게임 언어도 일본어로 바꾸고 재시작해야 합니다. PZ 코드 `JP`는 API 호출 시 공급자 코드 `JA`로 자동 변환됩니다.
 
@@ -88,10 +88,10 @@ node .\tools\worker\list-provider-models.cjs
 
 ### 게임 버튼으로 실행하기
 
-별도 PowerShell 창에서 한 번만 감시 워커를 시작해 둡니다.
+개발 중에는 별도 PowerShell 창에서 감시 워커를 시작할 수 있습니다.
 
 ```powershell
 .\tools\watch-translation-jobs.ps1
 ```
 
-그 뒤 게임의 `Queue translation`을 누르면 `Zomboid\Lua`에 요청을 쓰고, 감시 워커가 설정된 API 키를 읽어 번역팩을 설치합니다. 상태는 `Zomboid\Lua\PZAITranslator_status.ini`에 기록됩니다. 이 보조 프로세스는 게임 밖에서만 API를 호출하므로 게임 Lua에 HTTP/프로세스 실행 권한을 요구하지 않습니다.
+배포용 기본 흐름은 `tools\PZAITranslatorHelper.vbs`를 더블 클릭하는 것입니다. 같은 폴더의 감시 워커가 **숨김 창**으로 단일 인스턴스 실행됩니다. 그 뒤 게임의 `Queue translation`을 누르면 `Zomboid\Lua`에 요청을 쓰고, Helper가 설정된 API 키를 읽어 번역팩을 설치합니다. 상태는 `Zomboid\Lua\PZAITranslator_status.ini`에 기록됩니다. 이 보조 프로세스는 게임 밖에서만 API를 호출하므로 게임 Lua에 HTTP/프로세스 실행 권한을 요구하지 않습니다.
