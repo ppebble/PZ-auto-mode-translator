@@ -1,0 +1,3 @@
+﻿name=PZ AI Translator Probe
+description=Read-only development probe for B42.20 translation and local persistence.
+id=PZAIProbe

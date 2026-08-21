@@ -1,0 +1,6 @@
+﻿# PZ mod skeleton metadata
+name=PZ AI Translator
+id=PZAITranslator
+description=Scans active mod localization candidates and applies verified translation overlays.
+poster=poster.png
+

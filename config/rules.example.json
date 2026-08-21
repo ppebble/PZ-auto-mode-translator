@@ -1,0 +1,15 @@
+{
+  "rules": [
+    {
+      "id": "example-mre",
+      "enabled": false,
+      "kind": "regex",
+      "pattern": "\\bMRE\\b",
+      "replacement": "COMBAT_RATION",
+      "priority": 100,
+      "scope": {}
+    }
+  ],
+  "glossary": {},
+  "doNotTranslate": []
+}

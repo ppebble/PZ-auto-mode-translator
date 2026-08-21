@@ -1,0 +1,11 @@
+﻿{
+  "provider": "gemini",
+  "baseUrl": "",
+  "model": "gemini-2.5-flash-lite",
+  "apiKey": "SET_LOCALLY_ONLY",
+  "sourceLanguage": "EN",
+  "targetLanguage": "KO",
+  "requestTimeoutSeconds": 30,
+  "batchSize": 20,
+  "dryRun": true
+}

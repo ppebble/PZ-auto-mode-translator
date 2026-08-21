@@ -1,0 +1,98 @@
+require "ISUI/ISPanel"
+require "ISUI/ISButton"
+require "ISUI/ISLabel"
+require "ISUI/ISScrollingListBox"
+require "ISUI/ISTextEntryBox"
+require "ISUI/ISComboBox"
+
+PZAITranslator = PZAITranslator or {}
+local Selector = ISPanel:derive("PZAITranslatorSelector")
+
+function Selector:initialise()
+    ISPanel.initialise(self)
+    self.title = ISLabel:new(12, 10, 20, "Translation targets", 1, 1, 1, 1, UIFont.Medium, true)
+    self.title:initialise(); self:addChild(self.title)
+    local label = ISLabel:new(20, 40, 18, "Search:", 1, 1, 1, 1, UIFont.Small, true); label:initialise(); self:addChild(label)
+    self.searchEntry = ISTextEntryBox:new("", label:getRight() + 8, 34, self.width - 520, 28)
+    self.searchEntry.font = UIFont.Small; self.searchEntry.onTextChange = function() self:refresh() end; self.searchEntry:initialise(); self.searchEntry:instantiate(); self.searchEntry:setClearButton(true); self:addChild(self.searchEntry)
+    self.sortChoice = ISComboBox:new(self.width - 280, 34, 260, 28, self, Selector.refresh)
+    self.sortChoice:initialise(); self.sortChoice:addOption("Load order"); self.sortChoice.selected = 1; self:addChild(self.sortChoice)
+    self.list = ISScrollingListBox:new(20, 76, self.width - 40, self.height - 142)
+    self.list:initialise(); self.list.itemheight = math.max(34, getTextManager():getFontHeight(UIFont.Small) + 12); self.list.itemPadY = math.floor((self.list.itemheight - self.list.fontHgt) / 2) - 1
+    self.list.onMouseDown = function(list, x, y)
+        ISScrollingListBox.onMouseDown(list, x, y)
+        local item = list.items[list.selected]
+        if item then
+            item.item.selected = not item.item.selected; self.selectedById[item.item.id] = item.item.selected
+            item.text = (item.item.selected and "[x] " or "[ ] ") .. item.item.name .. "  <" .. item.item.id .. ">"
+        end
+    end
+    self:addChild(self.list)
+    self.allButton = ISButton:new(12, self.height - 42, 100, 28, "All", self, Selector.selectAll); self.allButton:initialise(); self:addChild(self.allButton)
+    self.noneButton = ISButton:new(118, self.height - 42, 100, 28, "None", self, Selector.selectNone); self.noneButton:initialise(); self:addChild(self.noneButton)
+    self.refreshButton = ISButton:new(224, self.height - 42, 100, 28, "Refresh", self, Selector.refresh); self.refreshButton:initialise(); self:addChild(self.refreshButton)
+    self.saveButton = ISButton:new(self.width - 212, self.height - 42, 95, 28, "Save", self, Selector.save); self.saveButton:initialise(); self:addChild(self.saveButton)
+    self.closeButton = ISButton:new(self.width - 111, self.height - 42, 95, 28, "Close", self, Selector.close); self.closeButton:initialise(); self:addChild(self.closeButton)
+    self:refresh()
+end
+function Selector:refresh()
+    self.selectedById = self.selectedById or {}
+    for _, item in ipairs(self.list.items) do self.selectedById[item.item.id] = item.item.selected end
+    local stored = {}; local useStored = false
+    for _, id in ipairs(PZAITranslator.loadTargetSelection()) do stored[id] = true; useStored = true end
+    self.list:clear()
+    local mods = getActivatedMods()
+    local filter = string.lower(self.searchEntry and self.searchEntry:getInternalText() or "")
+    for i = 0, mods:size() - 1 do
+        local id = mods:get(i)
+        if id ~= "PZAITranslator" and id ~= "PZAITranslationGenerated" then
+            local info = getModInfoByID(id); local name = info and info:getName() or id
+            local selected = self.selectedById[id] ~= nil and self.selectedById[id] or (useStored and stored[id] or false)
+            self.selectedById[id] = selected
+            if filter == "" or string.find(string.lower(name .. " " .. id), filter, 1, true) then self.list:addItem((selected and "[x] " or "[ ] ") .. name .. "  <" .. id .. ">", { id = id, name = name, selected = selected }) end
+        end
+    end
+end
+function Selector:selectAll() for _, item in ipairs(self.list.items) do item.item.selected = true; self.selectedById[item.item.id] = true; item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" end end
+function Selector:selectNone() for _, item in ipairs(self.list.items) do item.item.selected = false; self.selectedById[item.item.id] = false; item.text = "[ ] " .. item.item.name .. "  <" .. item.item.id .. ">" end end
+function Selector:save()
+    local out = {}; for id, selected in pairs(self.selectedById) do if selected then table.insert(out, id) end end
+    PZAITranslator.saveTargetSelection(out); self.title.name = "Translation targets - saved " .. tostring(#out)
+end
+function Selector:close() self:save(); self:setVisible(false); self:removeFromUIManager(); PZAITranslator.selector = nil end
+function Selector:new(x, y, w, h)
+    local o = ISPanel:new(x, y, w, h); setmetatable(o, self); self.__index = self
+    o.backgroundColor = {r=0, g=0, b=0, a=0.9}; o.borderColor = {r=1, g=1, b=1, a=0.35}; o.moveWithMouse = true
+    return o
+end
+function PZAITranslator.openTargetSelector()
+    if PZAITranslator.selector then PZAITranslator.selector:bringToTop(); return end
+    local screenW, screenH = getCore():getScreenWidth(), getCore():getScreenHeight()
+    local w,h = math.min(1300, math.max(900, screenW - 80)), math.min(900, math.max(700, screenH - 80))
+    local panel = Selector:new((screenW-w)/2, (screenH-h)/2, w,h)
+    panel:initialise(); panel:addToUIManager(); PZAITranslator.selector = panel
+end
+
+local TAB_INDEX = 3
+local function installCharacterTab()
+if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
+    PZAITranslator.charTabHooked = true
+    local original = ISCharacterInfoWindow.createChildren
+    function ISCharacterInfoWindow:createChildren(...)
+        local result = original(self, ...)
+        local ok, err = pcall(function()
+            if not self.panel or not self.panel.viewList then return end
+            local view = ISPanel:new(0, 8, self.width, self.height - 8); view:initialise()
+            local title = ISLabel:new(16, 18, 20, "AI Translator", 1, 1, 1, 1, UIFont.Medium, true); title:initialise(); view:addChild(title)
+            local info = ISLabel:new(16, 52, 18, "Select active mods, then queue translation from Mod Options.", 0.8, 0.8, 0.8, 1, UIFont.Small, true); info:initialise(); view:addChild(info)
+            local button = ISButton:new(16, 86, 250, 30, "Manage translation targets", nil, PZAITranslator.openTargetSelector); button:initialise(); view:addChild(button)
+            self.panel:addView("AI Translator", view)
+            local list = self.panel.viewList; if #list > TAB_INDEX then local entry=table.remove(list,#list); table.insert(list,TAB_INDEX,entry) end
+        end)
+        if not ok then print("PZAITranslator: character tab failed: " .. tostring(err)) end
+        return result
+    end
+end
+end
+installCharacterTab()
+Events.OnGameStart.Add(installCharacterTab)

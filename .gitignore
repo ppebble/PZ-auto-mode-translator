@@ -1,0 +1,19 @@
+﻿# Local-only provider settings; never commit secrets.
+provider.local.json
+*.local.json
+.env
+.env.*
+
+# PZ generated/runtime data
+runtime/
+output/
+logs/
+*.bak
+
+# OS/editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.omx/
+runtime/
