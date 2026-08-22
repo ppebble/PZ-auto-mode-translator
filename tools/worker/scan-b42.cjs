@@ -152,7 +152,7 @@ function main() {
   const records = new Map();
   const errors = [];
   const memory = loadTranslationMemory(translationMemoryPath);
-  const summary = { gameVersion, activeMods: ids.length, resolvedMods: 0, unresolvedMods: 0, excludedMods: 0, skippedModsWithTarget: 0, translateRoots: 0, files: 0, scriptFiles: 0, craftRecipes: 0, existing: 0, reused: 0, pending: 0, normalizedJson: 0, errors: 0 };
+  const summary = { gameVersion, activeMods: ids.length, resolvedMods: 0, unresolvedMods: 0, excludedMods: 0, skippedModsWithTarget: 0, translateRoots: 0, files: 0, scriptFiles: 0, craftRecipes: 0, existing: 0, existing_generated: 0, reused: 0, pending: 0, normalizedJson: 0, errors: 0 };
 
   for (const mod of mods) {
     if (excluded.has(mod.id) || (included.size > 0 && !included.has(mod.id))) { summary.excludedMods++; continue; }
