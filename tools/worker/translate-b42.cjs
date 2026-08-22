@@ -7,6 +7,14 @@ const crypto = require('node:crypto');
 function arg(name, fallback) { const i = process.argv.indexOf(name); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback; }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
 function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf8'); }
+function writeStatus(file, values) {
+  if (!file) return;
+  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod'];
+  const lines = ordered.filter(key => values[key] !== undefined && values[key] !== null)
+    .map(key => key + '=' + String(values[key]).replace(/[\r\n]/g, ' '));
+  lines.push('updatedAt=' + new Date().toISOString());
+  fs.writeFileSync(file, lines.join('\n') + '\n', 'utf8');
+}
 const languageMap = {
   KO: { name: 'Korean', providerCode: 'KO' }, JP: { name: 'Japanese', providerCode: 'JA' },
   CN: { name: 'Chinese (Simplified)', providerCode: 'ZH' }, CH: { name: 'Chinese (Traditional)', providerCode: 'ZH' },
@@ -45,18 +53,19 @@ function retryDelayMs(response, attempt) {
   // Bounded exponential backoff with jitter avoids synchronized retries.
   return Math.min(30000, 1500 * (2 ** attempt)) + Math.floor(Math.random() * 500);
 }
-async function fetchWithBackoff(label, request, config) {
+async function fetchWithBackoff(label, request, config, onRetry) {
   const maxRetries = Number.isInteger(config.maxRetries) ? config.maxRetries : 5;
   for (let attempt = 0; ; attempt++) {
     const response = await request();
     if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt >= maxRetries) return response;
     const delay = retryDelayMs(response, attempt);
     console.warn(`${label} HTTP ${response.status}; retrying in ${Math.ceil(delay / 1000)}s (${attempt + 1}/${maxRetries}).`);
+    if (onRetry) onRetry(response.status, attempt + 1, delay);
     await response.text(); // release the response body before the next request
     await sleep(delay);
   }
 }
-async function apiTranslate(records, config, rules) {
+async function apiTranslate(records, config, rules, progress) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const endpoint = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions';
   const payload = {
@@ -66,13 +75,14 @@ async function apiTranslate(records, config, rules) {
       { role: 'user', content: JSON.stringify(records.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }
     ]
   };
+  if (progress) progress(0, records[0] && records[0].modId);
   const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.apiKey }, body: JSON.stringify(payload), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
   if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
   const body = await response.json(); const content = body.choices && body.choices[0] && body.choices[0].message && body.choices[0].message.content;
   if (!content) throw new Error('Provider response missing choices[0].message.content');
-  const parsed = JSON.parse(content); return parsed.translations || parsed;
+  const parsed = JSON.parse(content); if (progress) progress(records.length, records[records.length - 1] && records[records.length - 1].modId); return parsed.translations || parsed;
 }
-async function deepLTranslate(records, config, rules) {
+async function deepLTranslate(records, config, rules, progress) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const apiBase = (config.baseUrl || 'https://api-free.deepl.com/v2').replace(/\/$/, '');
   const usageResponse = await fetch(apiBase + '/usage', { headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey }, signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
@@ -89,6 +99,7 @@ async function deepLTranslate(records, config, rules) {
   // requests below provider payload limits while preserving per-key mapping.
   for (let start = 0; start < records.length; start += 40) {
     const batch = records.slice(start, start + 40);
+    if (progress) progress(start, batch[0] && batch[0].modId);
     const body = { target_lang: target.providerCode, preserve_formatting: true, text: batch.map(record => record.source) };
     if (config.model && config.model !== 'default') body.model_type = config.model;
     const response = await fetch(endpoint, { method: 'POST', headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
@@ -96,10 +107,11 @@ async function deepLTranslate(records, config, rules) {
     const payload = await response.json();
     if (!Array.isArray(payload.translations) || payload.translations.length !== batch.length) throw new Error('DeepL response count mismatch');
     batch.forEach((record, index) => { result[record.id] = payload.translations[index].text; });
+    if (progress) progress(start + batch.length, batch[batch.length - 1] && batch[batch.length - 1].modId);
   }
   return result;
 }
-async function geminiTranslate(records, config, rules) {
+async function geminiTranslate(records, config, rules, progress) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const model = config.model || 'gemini-2.5-flash-lite';
   const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(config.apiKey);
@@ -111,18 +123,20 @@ async function geminiTranslate(records, config, rules) {
   let lastRequestAt = 0;
   for (let start = 0; start < records.length; start += 40) {
     const batch = records.slice(start, start + 40);
+    if (progress) progress(start, batch[0] && batch[0].modId);
     const prompt = 'Translate each English value to ' + target.name + '. Return only a JSON object mapping each id to its translated string. Preserve every placeholder exactly. Input: ' + JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key })));
     const waitMs = minimumIntervalMs - (Date.now() - lastRequestAt);
     if (waitMs > 0) await sleep(waitMs);
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
     lastRequestAt = Date.now();
-    const response = await fetchWithBackoff('Gemini batch ' + (Math.floor(start / 40) + 1), request, config);
+    const response = await fetchWithBackoff('Gemini batch ' + (Math.floor(start / 40) + 1), request, config, (status, attempt, delay) => progress && progress(start, batch[0] && batch[0].modId, { status, attempt, delay, retry: true }));
     if (!response.ok) throw new Error('Gemini HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     const content = payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts && payload.candidates[0].content.parts.map(x => x.text || '').join('');
     if (!content) throw new Error('Gemini response missing candidates[0].content.parts.text');
     const parsed = JSON.parse(content); const translations = parsed.translations || parsed;
     for (const record of batch) result[record.id] = translations[record.id];
+    if (progress) progress(start + batch.length, batch[batch.length - 1] && batch[batch.length - 1].modId);
   }
   return result;
 }
@@ -131,6 +145,7 @@ async function main() {
   const output = arg('--output', 'runtime/translated-manifest.json');
   const rulesPath = arg('--rules', 'config/rules.example.json');
   const providerPath = arg('--provider', 'config/provider.local.json');
+  const statusFile = arg('--status-file', '');
   const dryRun = process.argv.includes('--dry-run');
   const manifest = readJson(manifestPath); const rules = { ...readJson(rulesPath), targetLanguage: manifest.targetLanguage };
   const config = fs.existsSync(providerPath) && fs.statSync(providerPath).size > 0 ? readJson(providerPath) : {};
@@ -147,11 +162,23 @@ async function main() {
     } else direct.push({ ...record, target: null, status: 'pending_provider', method: null, appliedRules: [] });
   }
   const providerRecords = direct.filter(r => r.status === 'pending_provider'); let providerMap = {};
+  const baseCompleted = reusable.length + direct.filter(r => r.status === 'validated').length;
+  const baseFailed = unresolved.length;
+  const total = reusable.length + pending.length;
+  let retries = 0;
+  const updateProgress = (processed, currentMod, retry) => {
+    if (retry && retry.retry) retries++;
+    writeStatus(statusFile, {
+      state: 'running', phase: 'translating', message: retry && retry.retry ? `Retrying after HTTP ${retry.status} (${retry.attempt}/5).` : 'Translating selected mod text.',
+      total, completed: baseCompleted + processed, reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || ''
+    });
+  };
+  updateProgress(0, providerRecords[0] && providerRecords[0].modId);
   if (providerRecords.length && (dryRun || config.apiKey)) {
     if (dryRun) for (const record of providerRecords) providerMap[record.id] = dryTranslate(record.source, rules);
-    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerRecords, config, rules);
-    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerRecords, config, rules);
-    else providerMap = await apiTranslate(providerRecords, config, rules);
+    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerRecords, config, rules, updateProgress);
+    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerRecords, config, rules, updateProgress);
+    else providerMap = await apiTranslate(providerRecords, config, rules, updateProgress);
   } else if (providerRecords.length) throw new Error('No provider API key. Use --dry-run or configure provider.local.json.');
   const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
     const target = providerMap[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target);
@@ -160,6 +187,8 @@ async function main() {
   const reused = reusable.map(r => ({ ...r, status: 'validated', method: 'translation-memory' }));
   const allRecords = [...reused, ...translated];
   const result = { schema: 'pzat-translation-v1', generatedAt: new Date().toISOString(), mode: dryRun ? 'dry-run' : 'provider', targetLanguage: manifest.targetLanguage, summary: { pending: pending.length, reused: reused.length, validated: allRecords.filter(r => r.status === 'validated').length, needsReview: allRecords.filter(r => r.status === 'needs_review').length }, records: allRecords };
-  writeJson(output, result); console.log(JSON.stringify({ output, summary: result.summary }, null, 2));
+  writeJson(output, result);
+  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: reused.length, failed: result.summary.needsReview, retries, currentMod: '' });
+  console.log(JSON.stringify({ output, summary: result.summary }, null, 2));
 }
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

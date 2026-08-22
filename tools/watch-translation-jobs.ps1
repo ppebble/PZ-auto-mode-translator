@@ -26,8 +26,24 @@ function Read-Ini([string]$Path) {
     }
     return $result
 }
-function Write-Status([string]$State, [string]$Message) {
-    [System.IO.File]::WriteAllLines($status, @("state=$State", "message=$Message", "updatedAt=$([DateTime]::UtcNow.ToString('o'))"), (New-Object System.Text.UTF8Encoding($false)))
+function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{}) {
+    $lines = @("state=$State", "message=$Message")
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod')) {
+        if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
+    }
+    $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
+    [System.IO.File]::WriteAllLines($status, $lines, (New-Object System.Text.UTF8Encoding($false)))
+}
+function Friendly-Error([string]$Raw) {
+    $text = ($Raw -replace '\s+', ' ').Trim()
+    if ($text -match 'DeepL HTTP 456|DeepL quota insufficient') { return 'DeepL quota is exhausted or too small for this job. Check the DeepL account usage and billing period, then retry.' }
+    if ($text -match 'Gemini HTTP 429') { return 'Gemini rejected the request because of a rate limit or quota. Wait for the quota window, check the selected model/project quota, then retry.' }
+    if ($text -match 'HTTP 429') { return 'The provider rejected the request because of a rate limit or quota. Wait, check provider usage, then retry.' }
+    if ($text -match 'HTTP 401|HTTP 403|API key') { return 'The provider rejected the API key or account permission. Recheck the key, selected project, and model access.' }
+    if ($text -match 'No provider API key') { return 'No API key is saved. Enter and apply an API key in Mod Options before queueing translation.' }
+    if ($text -match 'node.+not recognized|node.+not found') { return 'Node.js 20 LTS or later is required by the Translation Helper. Install Node.js, then restart the Helper.' }
+    if ($text -match 'timed out|Timeout') { return 'The provider request timed out. Check the network and provider status, then retry.' }
+    return 'Translation failed: ' + $text
 }
 
 New-Item -ItemType Directory -Force -Path $lua, (Split-Path $providerJson -Parent) | Out-Null
@@ -47,7 +63,7 @@ try {
     $lockBytes = [System.Text.Encoding]::UTF8.GetBytes($lockText)
     $lockStream.Write($lockBytes, 0, $lockBytes.Length)
     $lockStream.Flush()
-    Write-Status 'idle' 'PZ AI Translator Helper is ready.'
+    Write-Status 'idle' 'Translation Helper is ready.' @{ phase = 'idle'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
     Write-Host "Watching $job (Ctrl+C to stop)."
 
     while ($true) {
@@ -63,7 +79,7 @@ try {
         $language = $request.targetLanguage
         if ([string]::IsNullOrWhiteSpace($language)) { $language = 'KO' }
         if ($request.action -eq 'test_connection') {
-            Write-Status 'running' 'Testing provider with Hello, World!'
+            Write-Status 'running' 'Testing provider with Hello, World!' @{ phase = 'testing'; total = 1; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
             $testResult = Join-Path $root 'runtime\provider-test-result.json'
             $testOutput = & node (Join-Path $PSScriptRoot 'worker\test-provider.cjs') --provider $providerJson --target-language $language --output $testResult 2>&1
             if ($LASTEXITCODE -ne 0) {
@@ -72,20 +88,24 @@ try {
             }
             $test = (Get-Content -LiteralPath $testResult -Raw -Encoding utf8 | ConvertFrom-Json)
             Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
-            Write-Status 'complete' ("Connection test OK: " + $test.output)
+            Write-Status 'complete' ("Connection test OK: " + $test.output) @{ phase = 'testing'; total = 1; completed = 1; reused = 0; failed = 0; retries = 0; currentMod = '' }
             continue
         }
         if ($request.action -ne 'translate') { throw 'Unsupported local job action.' }
-        Write-Status 'running' 'Starting local translation helper.'
+        Write-Status 'running' 'Starting translation job.' @{ phase = 'scanning'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
         $runArgs = @{ ZomboidHome = $ZomboidHome; TargetLanguage = $language; Provider = $providerJson; StatusFile = $status; Install = $true }
         if ($request.skipModsWithTarget -eq '1') { $runArgs.SkipModsWithTarget = $true }
         if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $runArgs.IncludeMods = $request.includeMods }
         & (Join-Path $PSScriptRoot 'run-translation.ps1') @runArgs
         if ($LASTEXITCODE -ne 0) { throw 'Translation worker failed.' }
         Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
-        Write-Status 'complete' 'Generated pack installed. Restart Project Zomboid.'
+        $last = Read-Ini $status
+        Write-Status 'complete' 'Generated pack installed. Enable PZAITranslationGenerated, return to the main menu, then enter the world again.' @{ phase = 'complete'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = '' }
     } catch {
-        Write-Status 'failed' $_.Exception.Message
+        $last = if (Test-Path -LiteralPath $status) { Read-Ini $status } else { @{} }
+        $previousFailed = 0
+        if ($last.ContainsKey('failed')) { $previousFailed = [int]$last.failed }
+        Write-Status 'failed' (Friendly-Error $_.Exception.Message) @{ phase = 'failed'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = ($previousFailed + 1); retries = $last.retries; currentMod = $last.currentMod }
         Write-Warning $_.Exception.Message
         # A failed request must not be retried forever: it can repeatedly spend
         # provider quota or hide the original error behind a rapid status loop.

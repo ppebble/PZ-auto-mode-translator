@@ -61,16 +61,31 @@ local function statusLabel()
     local labels = {
         idle = "Idle - no translation job requested.",
         needs_configuration = "Configuration required - enter a new API key and provider.",
-        queued = "Queued - waiting for the local helper.",
+        queued = "Queued - Helper has not confirmed this job. Start Translation Helper if it stays queued.",
         running = "Running - local helper is processing the job.",
-        complete = "Complete - enable PZAITranslationGenerated and restart the game.",
+        complete = "Complete - enable PZAITranslationGenerated, return to the main menu, then enter the world again.",
         failed = "Failed - read the message and correct the configuration."
     }
-    local updated = info.updatedAt and (" Last helper update: " .. info.updatedAt) or ""
-    return "Status: " .. (labels[state] or tostring(state)) .. " " .. tostring(message or "") .. updated
+    local total = tonumber(info.total or "0") or 0
+    local completed = tonumber(info.completed or "0") or 0
+    local reused = tonumber(info.reused or "0") or 0
+    local failed = tonumber(info.failed or "0") or 0
+    local retries = tonumber(info.retries or "0") or 0
+    local progress = total > 0 and (tostring(completed) .. "/" .. tostring(total) .. " | Reused " .. tostring(reused) .. " | Failed " .. tostring(failed) .. " | Retries " .. tostring(retries)) or "No item count yet"
+    return (labels[state] or tostring(state)) .. " | " .. progress
 end
 local statusIndicator = options:addTextEntry("statusIndicator", "Translation status", statusLabel(), "Read-only status. Use Refresh status to update it.")
 statusIndicator:setEnabled(false)
+local statusDetail = options:addTextEntry("statusDetail", "Status detail", "", "Current mod, Helper guidance, and provider result. Read-only.")
+statusDetail:setEnabled(false)
+
+local function statusDetailLabel()
+    local state, message = PZAITranslator.status()
+    local info = PZAITranslator.statusInfo()
+    local current = info.currentMod and info.currentMod ~= "" and ("Current mod: " .. info.currentMod .. " | ") or ""
+    if state == "queued" then return current .. tostring(message or "") .. " Start Translation Helper if the state does not become Running." end
+    return current .. tostring(message or "")
+end
 
 local function saveSettings()
     local provider = providerValues[providerChoice:getValue()] or "gemini"
@@ -95,6 +110,9 @@ local function refreshStatus()
     if statusIndicator.element ~= nil then
         statusIndicator.element:setText(label)
     end
+    local detail = statusDetailLabel()
+    statusDetail.value = detail
+    if statusDetail.element ~= nil then statusDetail.element:setText(detail) end
     print("PZAITranslator: " .. label)
 end
 local function queueTranslation()

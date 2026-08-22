@@ -64,11 +64,14 @@ function PZAITranslator.statusText()
     return tostring(state) .. ": " .. tostring(message)
 end
 
-function PZAITranslator.writeStatus(state, message)
+function PZAITranslator.writeStatus(state, message, details)
     local writer = getFileWriter(PZAITranslator.statusFile, true, false)
     if not writer then return false end
     writer:write("state=" .. tostring(state or "idle") .. "\n")
     writer:write("message=" .. tostring(message or "") .. "\n")
+    for _, key in ipairs({ "phase", "total", "completed", "reused", "failed", "retries", "currentMod" }) do
+        if details and details[key] ~= nil then writer:write(key .. "=" .. tostring(details[key]) .. "\n") end
+    end
     writer:close()
     PZAITranslator.state = state or "idle"
     return true
@@ -84,7 +87,7 @@ function PZAITranslator.requestTranslation()
     if #selected > 0 then writer:write("includeMods=" .. table.concat(selected, ",") .. "\n") end
     writer:write("requested=1\n")
     writer:close()
-    PZAITranslator.writeStatus("queued", "Waiting for the local translation helper.")
+    PZAITranslator.writeStatus("queued", "Helper not confirmed yet. If this remains queued, start Translation Helper.", { phase = "queued", total = 0, completed = 0, reused = 0, failed = 0, retries = 0, currentMod = "" })
     print("PZAITranslator: JOB_QUEUED")
     return true
 end
@@ -117,7 +120,7 @@ function PZAITranslator.requestConnectionTest()
     writer:write("targetLanguage=" .. tostring(PZAITranslator.loadProviderSettings().targetLanguage or "KO") .. "\n")
     writer:write("requested=1\n")
     writer:close()
-    PZAITranslator.writeStatus("queued", "Connection test queued: Hello, World!")
+    PZAITranslator.writeStatus("queued", "Connection test queued. Helper not confirmed yet.", { phase = "queued", total = 1, completed = 0, reused = 0, failed = 0, retries = 0, currentMod = "" })
     print("PZAITranslator: CONNECTION_TEST_QUEUED")
     return true
 end

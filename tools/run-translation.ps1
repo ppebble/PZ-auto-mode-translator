@@ -30,9 +30,14 @@ function Invoke-Worker([string[]]$WorkerArgs) {
     $workerOutput | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw ($workerOutput | Out-String).Trim() }
 }
-function Set-Stage([string]$Message) {
+function Set-Stage([string]$Message, [hashtable]$Details = @{}) {
     if ([string]::IsNullOrWhiteSpace($StatusFile)) { return }
-    [System.IO.File]::WriteAllLines($StatusFile, @('state=running', "message=$Message", "updatedAt=$([DateTime]::UtcNow.ToString('o'))"), (New-Object System.Text.UTF8Encoding($false)))
+    $lines = @('state=running', "message=$Message")
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod')) {
+        if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
+    }
+    $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
+    [System.IO.File]::WriteAllLines($StatusFile, $lines, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 Set-Stage '1/4 Scanning active B42 mods.'
@@ -40,16 +45,20 @@ $scanArgs = @((Join-Path $root 'tools\worker\scan-b42.cjs'), '--zomboid-home', $
 if ($SkipModsWithTarget) { $scanArgs += '--skip-mods-with-target' }
 if (-not [string]::IsNullOrWhiteSpace($IncludeMods)) { $scanArgs += @('--include-mods', $IncludeMods) }
 Invoke-Worker -WorkerArgs $scanArgs
+$manifest = Get-Content -LiteralPath $scan -Raw -Encoding utf8 | ConvertFrom-Json
+$total = [int]$manifest.summary.pending + [int]$manifest.summary.reused
+$reused = [int]$manifest.summary.reused
 $translationArgs = @((Join-Path $root 'tools\worker\translate-b42.cjs'), '--manifest', $scan, '--rules', $Rules, '--provider', $Provider, '--output', $translated)
+if (-not [string]::IsNullOrWhiteSpace($StatusFile)) { $translationArgs += @('--status-file', $StatusFile) }
 if ($DryRun) { $translationArgs += '--dry-run' }
-Set-Stage '2/4 Translating missing strings with the selected provider.'
+Set-Stage '2/4 Translating missing strings with the selected provider.' @{ phase = 'translating'; total = $total; completed = $reused; reused = $reused; failed = 0; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $translationArgs
 $packArgs = @((Join-Path $root 'tools\worker\materialize-b42.cjs'), '--input', $translated, '--output', $pack)
 if ($DryRun) { $packArgs += '--allow-dry-run' }
-Set-Stage '3/4 Validating placeholders and generating the translation pack.'
+Set-Stage '3/4 Validating placeholders and generating the translation pack.' @{ phase = 'generating'; total = $total; completed = $total; reused = $reused; failed = 0; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $packArgs
 if ($Install) {
-    Set-Stage '4/4 Installing PZAITranslationGenerated.'
+    Set-Stage '4/4 Installing PZAITranslationGenerated.' @{ phase = 'installing'; total = $total; completed = $total; reused = $reused; failed = 0; retries = 0; currentMod = '' }
     $modsRoot = Join-Path $ZomboidHome 'mods'
     $destination = Join-Path $modsRoot 'PZAITranslationGenerated'
     New-Item -ItemType Directory -Force -Path $modsRoot | Out-Null
@@ -60,4 +69,4 @@ if ($Install) {
     Copy-Item -Path (Join-Path $pack '*') -Destination $destination -Recurse -Force
     Write-Host "Installed generated pack: $destination"
 }
-Write-Host "Completed. Enable PZAITranslationGenerated and restart Project Zomboid to load the translation JSON."
+Write-Host "Completed. Enable PZAITranslationGenerated, return to the main menu, then enter the world again to load the translation JSON."
