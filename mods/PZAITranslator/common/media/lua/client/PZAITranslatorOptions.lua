@@ -3,7 +3,7 @@ require "PZAPI/ModOptions"
 
 PZAITranslator = PZAITranslator or {}
 local saved = PZAITranslator.loadProviderSettings()
-local options = PZAPI.ModOptions:create("PZAITranslator", "PZ AI Translator")
+local options = PZAPI.ModOptions:create("PZAITranslator", "자동 모드 번역기")
 
 local function textValue(option)
     if option.element ~= nil then return option.element:getInternalText() end
@@ -39,7 +39,7 @@ local function addAccountModels()
 end
 addAccountModels()
 
-options:addTitle("PZ AI Translator")
+options:addTitle("자동 모드 번역기")
 options:addDescription("Queue creates a local request. The external helper writes running, complete, or failed status here. Provider-specific models are listed; use Custom model ID only when your provider documents a different model.")
 local providerChoice = options:addComboBox("providerChoice", "Provider", "Gemini and DeepL offer free tiers with provider-specific quotas. OpenAI-compatible custom supports services using the Chat Completions protocol.")
 for index, label in ipairs(providerLabels) do providerChoice:addItem(label, providerValues[index] == saved.provider) end

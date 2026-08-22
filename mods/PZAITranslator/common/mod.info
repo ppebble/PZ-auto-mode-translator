@@ -1,0 +1,5 @@
+# PZ mod metadata shared by Build 42 clients.
+name=PZ Auto Mode Translator
+id=PZAITranslator
+description=자동 모드 번역기 - 활성 모드의 검증된 로컬 번역 오버레이를 생성합니다.
+poster=poster.png

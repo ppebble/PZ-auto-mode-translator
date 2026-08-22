@@ -20,11 +20,9 @@ Remove-Item -LiteralPath $release -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $stage, (Join-Path $stage 'tools'), (Join-Path $stage 'tools\worker'), (Join-Path $stage 'config') | Out-Null
 
-Copy-Item -LiteralPath (Join-Path $root 'helper\START-PZAITranslatorHelper.vbs') -Destination (Join-Path $stage 'START-PZAITranslatorHelper.vbs')
-Copy-Item -LiteralPath (Join-Path $root 'helper\STOP-PZAITranslatorHelper.vbs') -Destination (Join-Path $stage 'STOP-PZAITranslatorHelper.vbs')
-Copy-Item -LiteralPath (Join-Path $root 'helper\README-KO.md') -Destination (Join-Path $stage 'README-KO.md')
-Copy-Item -LiteralPath (Join-Path $root 'tools\PZAITranslatorHelper.vbs') -Destination (Join-Path $stage 'tools\PZAITranslatorHelper.vbs')
-Copy-Item -LiteralPath (Join-Path $root 'tools\Stop-PZAITranslatorHelper.vbs') -Destination (Join-Path $stage 'tools\Stop-PZAITranslatorHelper.vbs')
+Copy-Item -LiteralPath (Join-Path $root 'helper\START-TranslationHelper.vbs') -Destination (Join-Path $stage 'START-TranslationHelper.vbs')
+Copy-Item -LiteralPath (Join-Path $root 'helper\STOP-TranslationHelper.vbs') -Destination (Join-Path $stage 'STOP-TranslationHelper.vbs')
+Copy-Item -LiteralPath (Join-Path $root 'helper\README.md') -Destination (Join-Path $stage 'README.md')
 Copy-Item -LiteralPath (Join-Path $root 'tools\watch-translation-jobs.ps1') -Destination (Join-Path $stage 'tools\watch-translation-jobs.ps1')
 Copy-Item -LiteralPath (Join-Path $root 'tools\run-translation.ps1') -Destination (Join-Path $stage 'tools\run-translation.ps1')
 Copy-Item -LiteralPath (Join-Path $root 'config\rules.example.json') -Destination (Join-Path $stage 'config\rules.example.json')

@@ -1,0 +1,36 @@
+# PZ Auto Mode Translator Helper
+
+This local helper processes translation requests made by the **PZ Auto Mode Translator** Steam Workshop mod for Project Zomboid **Build 42 Stable 42.20.x and later**.
+
+## Not included
+
+- API keys
+- Generated `PZAITranslationGenerated` translation packs
+- Workshop source mods or Project Zomboid game files
+
+API keys and translation results remain on each user's PC under `C:\Users\<user>\Zomboid`.
+
+## Requirements
+
+1. Subscribe to and enable **PZ Auto Mode Translator** in Steam Workshop.
+2. Install [Node.js 20 LTS or later](https://nodejs.org/). Running `node --version` in PowerShell must show a version number after installation.
+3. Extract this entire ZIP to a writable folder outside Steam and Program Files, for example `C:\Users\<user>\Documents\PZ-Auto-Mode-Translator-Helper`.
+
+## Use
+
+1. Double-click `START-TranslationHelper.vbs`. After the confirmation message, the helper keeps running in the background.
+2. In-game, save your provider, model, API key, and target language, then run **Test connection**.
+3. Open the **AI Translator** tab in the character information window, select mods, and choose **Queue translation**.
+4. Wait until Translation status shows `complete`.
+5. Enable `PZAITranslationGenerated`, return to the main menu, then enter the world again.
+
+## Stop
+
+Double-click `STOP-TranslationHelper.vbs`. It stops only this helper and never closes unrelated PowerShell windows.
+
+## Troubleshooting
+
+- `failed: node ...`: install Node.js, then start the helper again.
+- Stuck at `queued`: start the helper. If it says it is already running, it is ready for requests.
+- `429` or `456`: the API provider has rejected the request because of a quota or rate limit. Check that provider's dashboard for the selected project and model.
+- No translation appears: enable the generated pack, return to the main menu, and enter the world again.

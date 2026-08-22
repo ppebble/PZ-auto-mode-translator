@@ -40,7 +40,7 @@ for (const { category, map } of values.values()) {
   writeUtf8(file, JSON.stringify(object, null, 2) + '\n');
   files++; keys += map.size;
 }
-const packName = 'PZ AI ' + languageName + ' Translation Pack';
+const packName = 'PZ Auto Mode ' + languageName + ' Translation Pack';
 writeUtf8(path.join(output, 'common', 'mod.info'), 'name=' + packName + '\nid=' + packId + '\ndescription=Generated B42.20+ ' + languageName + ' translations (' + keys + ' entries).\n');
 const report = { schema: 'pzat-pack-v1', packName, sourceMode: data.mode || 'unknown', targetLanguage: data.targetLanguage, output, files, keys, conflicts };
 writeUtf8(path.join(output, 'pack-report.json'), JSON.stringify(report, null, 2) + '\n');
