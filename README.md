@@ -54,6 +54,12 @@ node .\tools\worker\scan-b42.cjs `
 .\tools\run-translation.ps1 -Install
 ```
 
+Every scan also writes `Zomboid\Lua\PZAITranslator_catalog.ini`. The in-game target selector reads this local catalog and displays, for each scanned mod, existing translations, translations supplied by another overlay, reusable generated/memory translations, and strings that still need an API request.
+
+The selector supports text and translation-state filters plus load order, recent update, recent Steam install/update, API-character, and API-candidate sorting. Workshop timestamps come from Steam's local `appworkshop_108600.acf`; local mods use their directory modification time. Steam does not keep a reliable local subscription timestamp, so "recent Steam install/update" is intentionally not labelled as subscription order.
+
+Existing target-language strings are always preserved and excluded from API requests. Partial translations are scanned by default, so only their missing strings are sent; the Mod Options "Skip mods that already provide the target language" setting remains available when an entire mod should be skipped deliberately.
+
 `-Install` replaces only `$env:USERPROFILE\Zomboid\mods\PZAITranslationGenerated`. Enable that generated mod, return to the main menu, then enter the world again to reload translations.
 
 ## In-game flow
