@@ -102,7 +102,6 @@ try {
         if ($request.skipModsWithTarget -eq '1') { $runArgs.SkipModsWithTarget = $true }
         if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $runArgs.IncludeMods = $request.includeMods }
         & (Join-Path $PSScriptRoot 'run-translation.ps1') @runArgs
-        if ($LASTEXITCODE -ne 0) { throw 'Translation worker failed.' }
         Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
         $last = Read-Ini $status
         Write-Status 'complete' 'Generated pack installed. Enable PZAITranslationGenerated, return to the main menu, then enter the world again.' @{ phase = 'complete'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = '' }

@@ -72,8 +72,17 @@ local function statusLabel()
     local reused = tonumber(info.reused or "0") or 0
     local failed = tonumber(info.failed or "0") or 0
     local retries = tonumber(info.retries or "0") or 0
+    local waitSeconds = tonumber(info.waitSeconds or "0") or 0
+    local estimatedWaitSeconds = tonumber(info.estimatedWaitSeconds or "0") or 0
+    local function duration(seconds)
+        if seconds < 60 then return tostring(seconds) .. "s" end
+        return tostring(math.floor(seconds / 60)) .. "m " .. tostring(seconds % 60) .. "s"
+    end
     local progress = total > 0 and (tostring(completed) .. "/" .. tostring(total) .. " | Reused " .. tostring(reused) .. " | Failed " .. tostring(failed) .. " | Retries " .. tostring(retries)) or "No item count yet"
-    return (labels[state] or tostring(state)) .. " | " .. progress
+    if estimatedWaitSeconds > 0 then progress = progress .. " | Planned wait ~" .. duration(estimatedWaitSeconds) end
+    if waitSeconds > 0 then progress = progress .. " | Next batch in " .. duration(waitSeconds) end
+    local failure = state == "failed" and info.errorCode and info.errorCode ~= "" and (" (HTTP " .. tostring(info.errorCode) .. ")") or ""
+    return (labels[state] or tostring(state)) .. failure .. " | " .. progress
 end
 local statusIndicator = options:addTextEntry("statusIndicator", "Translation status", statusLabel(), "Read-only status. Use Refresh status to update it.")
 statusIndicator:setEnabled(false)

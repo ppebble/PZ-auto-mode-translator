@@ -62,10 +62,12 @@ function requestBatches(records, config) {
   return batches;
 }
 function pacingSettings(config, provider) {
-  const defaultInterval = provider === 'gemini' ? 10000 : provider === 'deepl' ? 2000 : 3000;
+  // A background game session can tolerate a conservative pace. Keeping every
+  // request over one minute apart avoids common per-minute free-tier limits.
+  const defaultInterval = 70000;
   return {
     intervalMs: Math.max(0, Number(config.minRequestIntervalMs) || defaultInterval),
-    modPauseMs: Math.max(0, Number(config.modPauseMs) || 8000),
+    modPauseMs: Math.max(0, Number(config.modPauseMs) || 70000),
   };
 }
 function estimatedWaitSeconds(batches, pacing) {
@@ -147,7 +149,8 @@ async function deepLTranslate(batches, config, rules, progress, plannedWaitSecon
     if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
     const body = { target_lang: target.providerCode, preserve_formatting: true, text: batch.map(record => record.source) };
     if (config.model && config.model !== 'default') body.model_type = config.model;
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
+    const request = () => fetch(endpoint, { method: 'POST', headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
+    const response = await fetchWithBackoff('DeepL batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('DeepL HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     if (!Array.isArray(payload.translations) || payload.translations.length !== batch.length) throw new Error('DeepL response count mismatch');
