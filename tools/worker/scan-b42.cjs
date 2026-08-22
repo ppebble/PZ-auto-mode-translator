@@ -13,6 +13,9 @@ function arg(name, fallback) {
 const zomboidHome = arg('--zomboid-home', path.join(process.env.USERPROFILE || '', 'Zomboid'));
 const output = arg('--output', path.join(process.cwd(), 'runtime', 'scan-manifest.json'));
 const targetLanguage = arg('--target-language', 'KO').toUpperCase();
+const catalog = arg('--catalog', path.join(zomboidHome, 'Lua', 'PZAITranslator_catalog.ini'));
+const steamWorkshopRoot = arg('--steam-workshop-root', path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Steam', 'steamapps', 'workshop', 'content', '108600'));
+const steamAppWorkshop = arg('--steam-appworkshop', path.join(path.dirname(path.dirname(steamWorkshopRoot)), 'appworkshop_108600.acf'));
 const excluded = new Set((arg('--exclude', 'PZAITranslator') || '').split(',').map(x => x.trim()).filter(Boolean));
 const included = new Set((arg('--include-mods', '') || '').split(',').map(x => x.trim()).filter(Boolean));
 const skipModsWithTarget = process.argv.includes('--skip-mods-with-target');
@@ -23,7 +26,7 @@ const gameVersion = arg('--game-version', fs.existsSync(versionFile) ? readText(
 const roots = [
   path.join(zomboidHome, 'mods'),
   path.join(zomboidHome, 'Workshop'),
-  path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Steam', 'steamapps', 'workshop', 'content', '108600'),
+  steamWorkshopRoot,
 ].filter(fs.existsSync);
 
 function readText(file) { return fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''); }
@@ -51,6 +54,38 @@ function modInfoId(file) {
     return line ? line.replace(/^\s*id\s*=\s*/, '').trim() : null;
   } catch { return null; }
 }
+function parseVdf(text) {
+  const tokens = [...text.matchAll(/"((?:\\.|[^"\\])*)"|([{}])/g)].map(match => match[1] === undefined ? match[2] : match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
+  let index = 0;
+  function object() {
+    const result = {};
+    while (index < tokens.length && tokens[index] !== '}') {
+      const key = tokens[index++];
+      if (tokens[index] === '{') { index++; result[key] = object(); if (tokens[index] === '}') index++; }
+      else result[key] = tokens[index++] || '';
+    }
+    return result;
+  }
+  return object();
+}
+function workshopMetadata() {
+  if (!fs.existsSync(steamAppWorkshop)) return new Map();
+  try {
+    const app = parseVdf(readText(steamAppWorkshop)).AppWorkshop || {};
+    const entries = app.WorkshopItemsInstalled || app.WorkshopItemDetails || {};
+    return new Map(Object.entries(entries).map(([id, item]) => [id, Number(item.timeupdated) || 0]));
+  } catch { return new Map(); }
+}
+function modUpdatedMetadata(modDir, workshopTimes) {
+  let localUpdatedAt = 0;
+  try { localUpdatedAt = Math.floor(fs.statSync(modDir).mtimeMs / 1000); } catch {}
+  const relative = path.relative(steamWorkshopRoot, modDir);
+  const workshopId = !relative.startsWith('..') && !path.isAbsolute(relative) ? relative.split(path.sep)[0] : null;
+  const workshopUpdatedAt = workshopId && /^\d+$/.test(workshopId) ? (workshopTimes.get(workshopId) || 0) : 0;
+  return workshopUpdatedAt > 0
+    ? { updatedAt: workshopUpdatedAt, steamUpdatedAt: workshopUpdatedAt, metadataSource: 'steam_install_update', workshopId }
+    : { updatedAt: localUpdatedAt, steamUpdatedAt: 0, metadataSource: 'local_file', workshopId: null };
+}
 function resolveMods(ids) {
   const index = new Map();
   for (const root of roots) {
@@ -59,7 +94,11 @@ function resolveMods(ids) {
       if (id && !index.has(id)) { const folder = path.dirname(info); const leaf = path.basename(folder).toLowerCase(); const root = (leaf === 'common' || /^\d/.test(leaf)) ? path.dirname(folder) : folder; index.set(id, root); }
     }
   }
-  return ids.map(id => ({ id, dir: index.get(id) || null }));
+  const workshopTimes = workshopMetadata();
+  return ids.map(id => {
+    const dir = index.get(id) || null;
+    return { id, dir, ...(dir ? modUpdatedMetadata(dir, workshopTimes) : { updatedAt: 0, steamUpdatedAt: 0, metadataSource: 'unresolved', workshopId: null }) };
+  });
 }
 function compareVersions(a, b) {
   const aa = a.split('.').map(Number); const bb = b.split('.').map(Number);
@@ -162,6 +201,33 @@ function effectiveTargetMap(mods) {
   }
   return map;
 }
+function writeCatalog(file, result) {
+  // Keep the catalog deliberately flat so game-side Lua can read it with the
+  // same line-based API used for the provider and model settings. `mod=` starts
+  // a new record; the following counters belong to that mod.
+  const lines = [
+    'schema=pzat-catalog-v1',
+    'generatedAt=' + result.generatedAt,
+    'targetLanguage=' + result.targetLanguage,
+  ];
+  for (const stat of result.modSummary) {
+    lines.push('mod=' + stat.modId);
+    for (const key of ['candidates', 'existing', 'existing_overlay', 'existing_generated', 'pending', 'sourceChars', 'apiChars', 'updatedAt', 'steamUpdatedAt', 'metadataSource']) {
+      lines.push(key + '=' + (stat[key] || 0));
+    }
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = file + '.tmp';
+  fs.writeFileSync(temporary, lines.join('\n') + '\n', 'utf8');
+  try { fs.renameSync(temporary, file); }
+  catch (error) {
+    // A few Windows file systems do not replace an existing destination on
+    // rename. The fallback is still safe because the complete replacement has
+    // already been written to a sibling temporary file.
+    if (error.code !== 'EEXIST' && error.code !== 'EPERM') throw error;
+    fs.rmSync(file, { force: true }); fs.renameSync(temporary, file);
+  }
+}
 function main() {
   if (!fs.existsSync(defaultList)) throw new Error(`Active mod list not found: ${defaultList}`);
   const ids = activeIds(readText(defaultList));
@@ -260,13 +326,17 @@ function main() {
   summary.reused = finalRecords.filter(x => x.status === 'existing_generated').length;
   summary.pending = finalRecords.filter(x => x.status === 'pending').length;
   const perMod = new Map();
+  const eligibleMods = mods.filter(mod => mod.dir && !excluded.has(mod.id) && (included.size === 0 || included.has(mod.id)));
+  for (const mod of eligibleMods) {
+    perMod.set(mod.id, { modId: mod.id, candidates: 0, existing: 0, existing_overlay: 0, existing_generated: 0, reused: 0, pending: 0, craftRecipes: 0, sourceChars: 0, apiChars: 0, updatedAt: mod.updatedAt, steamUpdatedAt: mod.steamUpdatedAt, metadataSource: mod.metadataSource });
+  }
   for (const record of finalRecords) {
-    if (!perMod.has(record.modId)) perMod.set(record.modId, { modId: record.modId, existing: 0, existing_overlay: 0, existing_generated: 0, reused: 0, pending: 0, craftRecipes: 0 });
-    const stat = perMod.get(record.modId); stat[record.status]++; if (record.sourceKind === 'craftRecipe') stat.craftRecipes++;
+    const stat = perMod.get(record.modId); stat.candidates++; stat[record.status]++; stat.sourceChars += Array.from(record.source).length; if (record.status === 'pending') stat.apiChars += Array.from(record.source).length; if (record.sourceKind === 'craftRecipe') stat.craftRecipes++;
   }
   const result = { schema: 'pzat-scan-v1', generatedAt: new Date().toISOString(), targetLanguage, gameVersion, excluded: [...excluded], included: [...included], skipModsWithTarget, translationMemory: { path: translationMemoryPath, reused: summary.reused }, summary, modSummary: [...perMod.values()].sort((a, b) => a.modId.localeCompare(b.modId)), errors, records: finalRecords };
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(result, null, 2), 'utf8');
-  console.log(JSON.stringify({ output, summary, errors: errors.length }, null, 2));
+  writeCatalog(catalog, result);
+  console.log(JSON.stringify({ output, catalog, summary, errors: errors.length }, null, 2));
 }
 main();

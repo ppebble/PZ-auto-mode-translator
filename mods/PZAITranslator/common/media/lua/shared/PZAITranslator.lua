@@ -6,6 +6,7 @@ PZAITranslator.storageFile = "PZAITranslator_provider.ini"
 PZAITranslator.jobFile = "PZAITranslator_job.ini"
 PZAITranslator.statusFile = "PZAITranslator_status.ini"
 PZAITranslator.selectionFile = "PZAITranslator_selection.ini"
+PZAITranslator.catalogFile = "PZAITranslator_catalog.ini"
 
 local function readStored(fileName)
     local result = {}
@@ -33,7 +34,10 @@ function PZAITranslator.loadProviderSettings()
         model = stored.model or "",
         apiKey = stored.apiKey or "",
         targetLanguage = stored.targetLanguage or "KO",
-        skipModsWithTarget = stored.skipModsWithTarget ~= "0"
+        -- The scanner already preserves every non-empty target key. Default to
+        -- scanning partial translation packs so only their missing keys reach
+        -- the API; users may still opt into skipping whole translated mods.
+        skipModsWithTarget = stored.skipModsWithTarget == "1"
     }
 end
 
@@ -111,6 +115,35 @@ function PZAITranslator.saveTargetSelection(selected)
     for _, modId in ipairs(selected or {}) do writer:write("mod=" .. tostring(modId) .. "\n") end
     writer:close()
     return true
+end
+
+function PZAITranslator.loadTargetCatalog()
+    local catalog = {}
+    local reader = getFileReader(PZAITranslator.catalogFile, true)
+    if not reader then return catalog, nil end
+    local current = nil
+    local targetLanguage = nil
+    while true do
+        local line = reader:readLine()
+        if line == nil then break end
+        local separator = string.find(line, "=", 1, true)
+        if separator ~= nil then
+            local key = string.sub(line, 1, separator - 1)
+            local value = string.sub(line, separator + 1)
+            if key == "mod" then
+                current = { modId = value, candidates = 0, existing = 0, existing_overlay = 0, existing_generated = 0, pending = 0, sourceChars = 0, apiChars = 0, updatedAt = 0, steamUpdatedAt = 0, metadataSource = "" }
+                catalog[value] = current
+            elseif key == "targetLanguage" then
+                targetLanguage = value
+            elseif current ~= nil and (key == "candidates" or key == "existing" or key == "existing_overlay" or key == "existing_generated" or key == "pending" or key == "sourceChars" or key == "apiChars" or key == "updatedAt" or key == "steamUpdatedAt") then
+                current[key] = tonumber(value) or 0
+            elseif current ~= nil and key == "metadataSource" then
+                current.metadataSource = value
+            end
+        end
+    end
+    reader:close()
+    return catalog, targetLanguage
 end
 
 function PZAITranslator.requestConnectionTest()
