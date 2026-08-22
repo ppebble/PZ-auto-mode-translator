@@ -38,6 +38,16 @@ Copy-Item config/provider.example.json config/provider.local.json
 
 현재 설치된 게임 경로는 `C:\Program Files (x86)\Steam\steamapps\common\ProjectZomboid`이며, 사용자 데이터의 실제 버전은 `42.20.3`으로 확인되었습니다. B41 및 B42 Unstable/42.19 이하는 지원 대상에서 제외합니다. Steam 라이브러리 위치가 확인되면 `-ZomboidHome`과 `-GameRoot`를 명시합니다.
 
+## Helper 배포 패키지 만들기
+
+창작마당 모드와 별도로 배포할 Helper ZIP은 다음 명령으로 생성합니다.
+
+```powershell
+.\tools\package-helper.ps1 -Version 0.1.0-beta.1
+```
+
+`dist\PZ-AI-Translator-Helper-0.1.0-beta.1.zip`에는 실행/종료 VBS, worker, 기본 규칙, 한국어 안내만 들어갑니다. API Key·runtime·생성 번역팩은 포함하지 않습니다. 구조와 사용자 설치 흐름은 [`docs/helper-distribution.md`](docs/helper-distribution.md)를 참조합니다.
+
 
 
 
