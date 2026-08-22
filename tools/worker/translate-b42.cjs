@@ -7,6 +7,21 @@ const crypto = require('node:crypto');
 function arg(name, fallback) { const i = process.argv.indexOf(name); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback; }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
 function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf8'); }
+function validatedMemory(file, targetLanguage) {
+  if (!file || !fs.existsSync(file)) return new Map();
+  try {
+    const value = readJson(file);
+    if (value.schema !== 'pzat-translation-v1' || value.targetLanguage !== targetLanguage || !Array.isArray(value.records)) return new Map();
+    return new Map(value.records.filter(record => record.status === 'validated' && typeof record.target === 'string' && record.target.trim() !== '')
+      .map(record => [record.id, { id: record.id, status: 'validated', target: record.target }]));
+  } catch { return new Map(); }
+}
+function updateTranslationMemory(file, targetLanguage, records) {
+  if (!file) return;
+  const memory = validatedMemory(file, targetLanguage);
+  for (const record of records) if (record.status === 'validated' && typeof record.target === 'string' && record.target.trim() !== '') memory.set(record.id, { id: record.id, status: 'validated', target: record.target });
+  writeJson(file, { schema: 'pzat-translation-v1', generatedAt: new Date().toISOString(), targetLanguage, records: [...memory.values()] });
+}
 function writeStatus(file, values) {
   if (!file) return;
   const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod', 'waitSeconds', 'estimatedWaitSeconds', 'errorCode'];
@@ -108,7 +123,7 @@ async function fetchWithBackoff(label, request, config, onRetry) {
     await sleep(delay);
   }
 }
-async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds) {
+async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const endpoint = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions';
   const result = {}; const pace = createPacer(pacingSettings(config, 'openai'), progress, plannedWaitSeconds); let processed = 0;
@@ -123,12 +138,12 @@ async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds
     if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
     const body = await response.json(); const content = body.choices && body.choices[0] && body.choices[0].message && body.choices[0].message.content;
     if (!content) throw new Error('Provider response missing choices[0].message');
-    const parsedBody = JSON.parse(content); Object.assign(result, parsedBody.translations || parsedBody); processed += batch.length;
+    const parsedBody = JSON.parse(content); Object.assign(result, parsedBody.translations || parsedBody); processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
-async function deepLTranslate(batches, config, rules, progress, plannedWaitSeconds) {
+async function deepLTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const apiBase = (config.baseUrl || 'https://api-free.deepl.com/v2').replace(/\/$/, '');
   const usageResponse = await fetch(apiBase + '/usage', { headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey }, signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
@@ -155,12 +170,12 @@ async function deepLTranslate(batches, config, rules, progress, plannedWaitSecon
     const payload = await response.json();
     if (!Array.isArray(payload.translations) || payload.translations.length !== batch.length) throw new Error('DeepL response count mismatch');
     batch.forEach((record, index) => { result[record.id] = payload.translations[index].text; });
-    processed += batch.length;
+    processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
-async function geminiTranslate(batches, config, rules, progress, plannedWaitSeconds) {
+async function geminiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const model = config.model || 'gemini-2.5-flash-lite';
   const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(config.apiKey);
@@ -182,7 +197,7 @@ async function geminiTranslate(batches, config, rules, progress, plannedWaitSeco
     if (!content) throw new Error('Gemini response missing candidates[0].content.parts.text');
     const parsed = JSON.parse(content); const translations = parsed.translations || parsed;
     for (const record of batch) result[record.id] = translations[record.id];
-    processed += batch.length;
+    processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
@@ -190,6 +205,7 @@ async function geminiTranslate(batches, config, rules, progress, plannedWaitSeco
 async function main() {
   const manifestPath = arg('--manifest', 'runtime/scan-manifest.json');
   const output = arg('--output', 'runtime/translated-manifest.json');
+  const translationMemoryPath = arg('--translation-memory', 'runtime/translation-memory.json');
   const rulesPath = arg('--rules', 'config/rules.example.json');
   const providerPath = arg('--provider', 'config/provider.local.json');
   const statusFile = arg('--status-file', '');
@@ -224,21 +240,26 @@ async function main() {
     });
   };
   updateProgress(0, providerRecords[0] && providerRecords[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+  const buildResult = map => {
+    const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
+      const target = map[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target);
+      return { ...r, target: typeof target === 'string' ? target : null, status: error ? 'needs_review' : 'validated', method: 'provider', reason: error };
+    }).map(r => ({ ...r, method: dryRun ? 'dry-run' : r.method })), ...unresolved];
+    const reused = reusable.map(r => ({ ...r, status: 'validated', method: 'translation-memory' }));
+    const allRecords = [...reused, ...translated];
+    return { schema: 'pzat-translation-v1', generatedAt: new Date().toISOString(), mode: dryRun ? 'dry-run' : 'provider', targetLanguage: manifest.targetLanguage, summary: { pending: pending.length, reused: reused.length, validated: allRecords.filter(r => r.status === 'validated').length, needsReview: allRecords.filter(r => r.status === 'needs_review').length }, records: allRecords };
+  };
+  const checkpoint = map => updateTranslationMemory(translationMemoryPath, manifest.targetLanguage, buildResult(map).records);
   if (providerRecords.length && (dryRun || config.apiKey)) {
     if (dryRun) for (const record of providerRecords) providerMap[record.id] = dryTranslate(record.source, rules);
-    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds);
-    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds);
-    else providerMap = await apiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds);
+    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
+    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
+    else providerMap = await apiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
   } else if (providerRecords.length) throw new Error('No provider API key. Use --dry-run or configure provider.local.json.');
-  const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
-    const target = providerMap[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target);
-    return { ...r, target: typeof target === 'string' ? target : null, status: error ? 'needs_review' : 'validated', method: 'provider', reason: error };
-  }).map(r => ({ ...r, method: dryRun ? 'dry-run' : r.method })), ...unresolved];
-  const reused = reusable.map(r => ({ ...r, status: 'validated', method: 'translation-memory' }));
-  const allRecords = [...reused, ...translated];
-  const result = { schema: 'pzat-translation-v1', generatedAt: new Date().toISOString(), mode: dryRun ? 'dry-run' : 'provider', targetLanguage: manifest.targetLanguage, summary: { pending: pending.length, reused: reused.length, validated: allRecords.filter(r => r.status === 'validated').length, needsReview: allRecords.filter(r => r.status === 'needs_review').length }, records: allRecords };
+  const result = buildResult(providerMap);
+  checkpoint(providerMap);
   writeJson(output, result);
-  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: reused.length, failed: result.summary.needsReview, retries, currentMod: '' });
+  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: result.summary.reused, failed: result.summary.needsReview, retries, currentMod: '' });
   console.log(JSON.stringify({ output, summary: result.summary }, null, 2));
 }
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

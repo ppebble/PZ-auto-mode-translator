@@ -81,17 +81,18 @@ function PZAITranslator.writeStatus(state, message, details)
     return true
 end
 
-function PZAITranslator.requestTranslation()
+function PZAITranslator.requestTranslation(action)
     local writer = getFileWriter(PZAITranslator.jobFile, true, false)
     if not writer then return false end
-    writer:write("action=translate\n")
+    writer:write("action=" .. (action == "resume" and "resume" or "translate") .. "\n")
     writer:write("targetLanguage=" .. tostring(PZAITranslator.loadProviderSettings().targetLanguage or "KO") .. "\n")
     writer:write("skipModsWithTarget=" .. (PZAITranslator.loadProviderSettings().skipModsWithTarget == false and "0" or "1") .. "\n")
     local selected = PZAITranslator.loadTargetSelection()
     if #selected > 0 then writer:write("includeMods=" .. table.concat(selected, ",") .. "\n") end
     writer:write("requested=1\n")
     writer:close()
-    PZAITranslator.writeStatus("queued", "Helper not confirmed yet. If this remains queued, start Translation Helper.", { phase = "queued", total = 0, completed = 0, reused = 0, failed = 0, retries = 0, currentMod = "" })
+    local message = action == "resume" and "Resume queued. Saved completed batches will be reused with the selected model." or "Helper not confirmed yet. If this remains queued, start Translation Helper."
+    PZAITranslator.writeStatus("queued", message, { phase = "queued", total = 0, completed = 0, reused = 0, failed = 0, retries = 0, currentMod = "" })
     print("PZAITranslator: JOB_QUEUED")
     return true
 end

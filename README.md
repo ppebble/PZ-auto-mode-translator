@@ -71,6 +71,10 @@ Existing target-language strings are always preserved and excluded from API requ
 5. Enable `PZAITranslationGenerated`, return to the main menu, and enter the world again.
 6. Stop the background Helper with `STOP-TranslationHelper.vbs` when it is no longer needed.
 
+### Resume after a quota error
+
+Completed batches are saved locally in the Helper's `runtime\translation-memory.json` after every successful provider batch. If a provider returns a quota or rate-limit error, change the provider/model in Mod Options, save it, and choose **Resume interrupted translation** with the same selected mods and target language. The next scan reuses validated checkpoints and sends only still-pending strings to the newly selected model.
+
 ## Provider models
 
 `gemini-2.5-flash-lite` is the default Gemini model. DeepL uses translation modes rather than chat-model IDs. OpenAI-compatible providers require a model ID accepted by that provider.

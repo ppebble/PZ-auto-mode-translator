@@ -19,7 +19,7 @@ const steamAppWorkshop = arg('--steam-appworkshop', path.join(path.dirname(path.
 const excluded = new Set((arg('--exclude', 'PZAITranslator') || '').split(',').map(x => x.trim()).filter(Boolean));
 const included = new Set((arg('--include-mods', '') || '').split(',').map(x => x.trim()).filter(Boolean));
 const skipModsWithTarget = process.argv.includes('--skip-mods-with-target');
-const translationMemoryPath = arg('--translation-memory', path.join(process.cwd(), 'runtime', 'translated-manifest.json'));
+const translationMemoryPath = arg('--translation-memory', path.join(process.cwd(), 'runtime', 'translation-memory.json'));
 const defaultList = path.join(zomboidHome, 'mods', 'default.txt');
 const versionFile = path.join(zomboidHome, 'version.txt');
 const gameVersion = arg('--game-version', fs.existsSync(versionFile) ? readText(versionFile).trim().split(/\s+/)[0] : '42.20.0');

@@ -23,6 +23,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $runtime = Join-Path $root 'runtime'
 $scan = Join-Path $runtime 'scan-manifest.json'
 $translated = Join-Path $runtime 'translated-manifest.json'
+$translationMemory = Join-Path $runtime 'translation-memory.json'
 $pack = Join-Path $runtime 'generated-pack'
 
 function Invoke-Worker([string[]]$WorkerArgs) {
@@ -41,14 +42,14 @@ function Set-Stage([string]$Message, [hashtable]$Details = @{}) {
 }
 
 Set-Stage '1/4 Scanning active B42 mods.'
-$scanArgs = @((Join-Path $root 'tools\worker\scan-b42.cjs'), '--zomboid-home', $ZomboidHome, '--target-language', $TargetLanguage, '--exclude', $Exclude, '--output', $scan)
+$scanArgs = @((Join-Path $root 'tools\worker\scan-b42.cjs'), '--zomboid-home', $ZomboidHome, '--target-language', $TargetLanguage, '--exclude', $Exclude, '--output', $scan, '--translation-memory', $translationMemory)
 if ($SkipModsWithTarget) { $scanArgs += '--skip-mods-with-target' }
 if (-not [string]::IsNullOrWhiteSpace($IncludeMods)) { $scanArgs += @('--include-mods', $IncludeMods) }
 Invoke-Worker -WorkerArgs $scanArgs
 $manifest = Get-Content -LiteralPath $scan -Raw -Encoding utf8 | ConvertFrom-Json
 $total = [int]$manifest.summary.pending + [int]$manifest.summary.reused
 $reused = [int]$manifest.summary.reused
-$translationArgs = @((Join-Path $root 'tools\worker\translate-b42.cjs'), '--manifest', $scan, '--rules', $Rules, '--provider', $Provider, '--output', $translated)
+$translationArgs = @((Join-Path $root 'tools\worker\translate-b42.cjs'), '--manifest', $scan, '--rules', $Rules, '--provider', $Provider, '--output', $translated, '--translation-memory', $translationMemory)
 if (-not [string]::IsNullOrWhiteSpace($StatusFile)) { $translationArgs += @('--status-file', $StatusFile) }
 if ($DryRun) { $translationArgs += '--dry-run' }
 Set-Stage '2/4 Translating missing strings with the selected provider.' @{ phase = 'translating'; total = $total; completed = $reused; reused = $reused; failed = 0; retries = 0; currentMod = '' }

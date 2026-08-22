@@ -65,7 +65,7 @@ local function statusLabel()
         queued = "Queued - Helper has not confirmed this job. Start Translation Helper if it stays queued.",
         running = "Running - local helper is processing the job.",
         complete = "Complete - enable PZAITranslationGenerated, return to the main menu, then enter the world again.",
-        failed = "Failed - read the message and correct the configuration."
+        failed = "Failed - completed batches are saved. Change the model if needed, then resume."
     }
     local total = tonumber(info.total or "0") or 0
     local completed = tonumber(info.completed or "0") or 0
@@ -129,12 +129,17 @@ local function queueTranslation()
     if saveSettings() then PZAITranslator.requestTranslation() end
     refreshStatus()
 end
+local function resumeTranslation()
+    if saveSettings() then PZAITranslator.requestTranslation("resume") end
+    refreshStatus()
+end
 local function testConnection()
     if saveSettings() then PZAITranslator.requestConnectionTest() end
     refreshStatus()
 end
 options:addButton("testConnection", "Test API: Hello, World!", "Uses the selected provider to translate Hello, World! and reports the result without scanning or generating a pack.", testConnection)
-options:addButton("queueTranslation", "Queue translation", "Save settings and queue a local translation job.", queueTranslation)
+options:addButton("queueTranslation", "Start new translation", "Scan the selected mods and translate their missing strings. Saved translations are always reused.", queueTranslation)
+options:addButton("resumeTranslation", "Resume interrupted translation", "After a quota or provider failure, save the selected model and resume from completed batch checkpoints. Use the same selected mods and target language.", resumeTranslation)
 options:addButton("refreshStatus", "Refresh status", "Read the result written by the local helper.", refreshStatus)
 
 -- MainOptions does not rebuild its page after a button callback. Polling only

@@ -37,7 +37,7 @@ function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{
 function Friendly-Error([string]$Raw) {
     $text = ($Raw -replace '\s+', ' ').Trim()
     if ($text -match 'DeepL HTTP 456|DeepL quota insufficient') { return 'DeepL quota is exhausted or too small for this job. Check the DeepL account usage and billing period, then retry.' }
-    if ($text -match 'Gemini HTTP 429') { return 'HTTP 429: Gemini rate limit or quota. Wait for the quota window, check the selected model/project quota, then retry.' }
+    if ($text -match 'Gemini HTTP 429') { return 'HTTP 429: Gemini rate limit or quota. Completed batches were saved. Change the model if needed, then use Resume interrupted translation.' }
     if ($text -match 'HTTP 429') { return 'HTTP 429: Provider rate limit or quota. Wait, check provider usage, then retry.' }
     if ($text -match 'HTTP 401|HTTP 403|API key') { return 'The provider rejected the API key or account permission. Recheck the key, selected project, and model access.' }
     if ($text -match 'No provider API key') { return 'No API key is saved. Enter and apply an API key in Mod Options before queueing translation.' }
@@ -75,7 +75,7 @@ try {
     if (-not (Test-Path -LiteralPath $job)) { Start-Sleep -Seconds $PollSeconds; continue }
     try {
         $request = Read-Ini $job
-        if ($request.action -ne 'translate' -and $request.action -ne 'test_connection') { throw 'Unsupported local job action.' }
+        if ($request.action -ne 'translate' -and $request.action -ne 'resume' -and $request.action -ne 'test_connection') { throw 'Unsupported local job action.' }
         if (-not (Test-Path -LiteralPath $providerIni)) { throw 'Save provider settings in Mod Options before queuing a job.' }
         $settings = Read-Ini $providerIni
         if ([string]::IsNullOrWhiteSpace($settings.apiKey) -or [string]::IsNullOrWhiteSpace($settings.model)) { throw 'API key and model are required.' }
@@ -96,8 +96,9 @@ try {
             Write-Status 'complete' ("Connection test OK: " + $test.output) @{ phase = 'testing'; total = 1; completed = 1; reused = 0; failed = 0; retries = 0; currentMod = '' }
             continue
         }
-        if ($request.action -ne 'translate') { throw 'Unsupported local job action.' }
-        Write-Status 'running' 'Starting translation job.' @{ phase = 'scanning'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
+        if ($request.action -ne 'translate' -and $request.action -ne 'resume') { throw 'Unsupported local job action.' }
+        $startMessage = if ($request.action -eq 'resume') { 'Resuming translation from saved checkpoints with the selected provider/model.' } else { 'Starting translation job.' }
+        Write-Status 'running' $startMessage @{ phase = 'scanning'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
         $runArgs = @{ ZomboidHome = $ZomboidHome; TargetLanguage = $language; Provider = $providerJson; StatusFile = $status; Install = $true }
         if ($request.skipModsWithTarget -eq '1') { $runArgs.SkipModsWithTarget = $true }
         if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $runArgs.IncludeMods = $request.includeMods }

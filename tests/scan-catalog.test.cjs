@@ -14,6 +14,7 @@ const output = path.join(root, 'scan.json');
 const translated = path.join(root, 'translated.json');
 const catalog = path.join(home, 'Lua', 'PZAITranslator_catalog.ini');
 const memory = path.join(root, 'memory.json');
+const resumeMemory = path.join(root, 'resume-memory.json');
 const hash = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 
 function mod(id, translations) {
@@ -46,12 +47,16 @@ try {
   const catalogLines = ['schema=pzat-catalog-v1', 'generatedAt=' + manifest.generatedAt, 'targetLanguage=KO'];
   for (const item of manifest.modSummary) catalogLines.push('mod=' + item.modId, 'candidates=' + item.candidates, 'existing=' + item.existing, 'existing_overlay=' + item.existing_overlay, 'existing_generated=' + item.existing_generated, 'pending=' + item.pending, 'sourceChars=' + item.sourceChars, 'apiChars=' + item.apiChars, 'updatedAt=' + item.updatedAt, 'steamUpdatedAt=' + item.steamUpdatedAt, 'metadataSource=' + item.metadataSource);
   assert.equal(fs.readFileSync(catalog, 'utf8'), catalogLines.join('\n') + '\n');
-  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--dry-run'], { stdio: 'pipe' });
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--translation-memory', resumeMemory, '--dry-run'], { stdio: 'pipe' });
   const translation = JSON.parse(fs.readFileSync(translated, 'utf8'));
   assert.deepEqual(translation.summary, { pending: 1, reused: 1, validated: 2, needsReview: 0 });
   assert.deepEqual(translation.records.map(record => [record.key, record.method]).sort(), [
     ['generated', 'translation-memory'], ['pending', 'dry-run']
   ]);
+  const resume = JSON.parse(fs.readFileSync(resumeMemory, 'utf8'));
+  assert.equal(resume.records.some(record => record.id.endsWith(hash('Needs API')) && record.target === '[DRY-RUN KO] Needs API'), true);
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', resumeMemory, '--include-mods', 'MainMod'], { stdio: 'pipe' });
+  assert.equal(JSON.parse(fs.readFileSync(output, 'utf8')).summary.pending, 0);
 
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory, '--include-mods', 'MainMod', '--skip-mods-with-target'], { stdio: 'pipe' });
   const skipped = JSON.parse(fs.readFileSync(output, 'utf8'));
