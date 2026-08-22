@@ -9,7 +9,7 @@ function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replac
 function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(value, null, 2), 'utf8'); }
 function writeStatus(file, values) {
   if (!file) return;
-  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod'];
+  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod', 'waitSeconds', 'estimatedWaitSeconds', 'errorCode'];
   const lines = ordered.filter(key => values[key] !== undefined && values[key] !== null)
     .map(key => key + '=' + String(values[key]).replace(/[\r\n]/g, ' '));
   lines.push('updatedAt=' + new Date().toISOString());
@@ -46,6 +46,47 @@ function applyRules(source, record, rules) {
 }
 function dryTranslate(source, rules) { return '[DRY-RUN ' + rules.targetLanguage + '] ' + source; }
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function recordChars(record) { return Array.from(record.source || '').length; }
+function requestBatches(records, config) {
+  const maxItems = Math.max(1, Math.min(100, Number(config.batchSize) || 20));
+  const maxChars = Math.max(100, Number(config.maxBatchChars) || 3000);
+  const batches = []; let batch = []; let chars = 0;
+  for (const record of records) {
+    const length = recordChars(record);
+    if (batch.length && (batch[0].modId !== record.modId || batch.length >= maxItems || chars + length > maxChars)) {
+      batches.push(batch); batch = []; chars = 0;
+    }
+    batch.push(record); chars += length;
+  }
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+function pacingSettings(config, provider) {
+  const defaultInterval = provider === 'gemini' ? 10000 : provider === 'deepl' ? 2000 : 3000;
+  return {
+    intervalMs: Math.max(0, Number(config.minRequestIntervalMs) || defaultInterval),
+    modPauseMs: Math.max(0, Number(config.modPauseMs) || 8000),
+  };
+}
+function estimatedWaitSeconds(batches, pacing) {
+  let ms = 0;
+  for (let index = 1; index < batches.length; index++) ms += Math.max(pacing.intervalMs, batches[index - 1][0].modId !== batches[index][0].modId ? pacing.modPauseMs : 0);
+  return Math.ceil(ms / 1000);
+}
+function createPacer(pacing, progress, plannedWaitSeconds) {
+  let lastRequestAt = 0; let lastMod = null;
+  return async batch => {
+    if (lastRequestAt > 0) {
+      const minimum = lastMod !== batch[0].modId ? Math.max(pacing.intervalMs, pacing.modPauseMs) : pacing.intervalMs;
+      const waitMs = Math.max(0, lastRequestAt + minimum - Date.now());
+      if (waitMs > 0) {
+        progress(null, batch[0].modId, { phase: 'waiting', waitSeconds: Math.ceil(waitMs / 1000), estimatedWaitSeconds: plannedWaitSeconds, message: `Rate-limit pacing: waiting ${Math.ceil(waitMs / 1000)}s before the next batch.` });
+        await sleep(waitMs);
+      }
+    }
+    lastRequestAt = Date.now(); lastMod = batch[0].modId;
+  };
+}
 function retryDelayMs(response, attempt) {
   const retryAfter = response.headers.get('retry-after');
   const seconds = retryAfter && Number(retryAfter);
@@ -65,30 +106,33 @@ async function fetchWithBackoff(label, request, config, onRetry) {
     await sleep(delay);
   }
 }
-async function apiTranslate(records, config, rules, progress) {
+async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const endpoint = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions';
-  const payload = {
-    model: config.model, temperature: 0, response_format: { type: 'json_object' },
-    messages: [
+  const result = {}; const pace = createPacer(pacingSettings(config, 'openai'), progress, plannedWaitSeconds); let processed = 0;
+  for (const batch of batches) {
+    await pace(batch); if (progress) progress(processed, batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    const payload = { model: config.model, temperature: 0, response_format: { type: 'json_object' }, messages: [
       { role: 'system', content: 'Translate from English to ' + target.name + '. Return JSON object mapping each id to translated text. Preserve every placeholder exactly.' },
-      { role: 'user', content: JSON.stringify(records.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }
-    ]
-  };
-  if (progress) progress(0, records[0] && records[0].modId);
-  const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.apiKey }, body: JSON.stringify(payload), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
-  if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
-  const body = await response.json(); const content = body.choices && body.choices[0] && body.choices[0].message && body.choices[0].message.content;
-  if (!content) throw new Error('Provider response missing choices[0].message.content');
-  const parsed = JSON.parse(content); if (progress) progress(records.length, records[records.length - 1] && records[records.length - 1].modId); return parsed.translations || parsed;
+      { role: 'user', content: JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }
+    ] };
+    const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.apiKey }, body: JSON.stringify(payload), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
+    const response = await fetchWithBackoff('OpenAI batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
+    if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
+    const body = await response.json(); const content = body.choices && body.choices[0] && body.choices[0].message && body.choices[0].message.content;
+    if (!content) throw new Error('Provider response missing choices[0].message');
+    const parsedBody = JSON.parse(content); Object.assign(result, parsedBody.translations || parsedBody); processed += batch.length;
+    if (progress) progress(processed, batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+  }
+  return result;
 }
-async function deepLTranslate(records, config, rules, progress) {
+async function deepLTranslate(batches, config, rules, progress, plannedWaitSeconds) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const apiBase = (config.baseUrl || 'https://api-free.deepl.com/v2').replace(/\/$/, '');
   const usageResponse = await fetch(apiBase + '/usage', { headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey }, signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
   if (!usageResponse.ok) throw new Error('DeepL usage HTTP ' + usageResponse.status + ': ' + await usageResponse.text());
   const usage = await usageResponse.json();
-  const requestedCharacters = records.reduce((total, record) => total + Array.from(record.source).length, 0);
+  const requestedCharacters = batches.flat().reduce((total, record) => total + Array.from(record.source).length, 0);
   const remainingCharacters = Number(usage.character_limit) - Number(usage.character_count);
   if (Number.isFinite(remainingCharacters) && remainingCharacters < requestedCharacters) {
     throw new Error('DeepL quota insufficient: remaining ' + remainingCharacters + ' characters, requested about ' + requestedCharacters + '. Use a new billing period/key or another provider.');
@@ -97,9 +141,10 @@ async function deepLTranslate(records, config, rules, progress) {
   const result = {};
   // DeepL accepts multiple text values per request. Conservative chunks keep
   // requests below provider payload limits while preserving per-key mapping.
-  for (let start = 0; start < records.length; start += 40) {
-    const batch = records.slice(start, start + 40);
-    if (progress) progress(start, batch[0] && batch[0].modId);
+  const pace = createPacer(pacingSettings(config, 'deepl'), progress, plannedWaitSeconds); let processed = 0;
+  for (const batch of batches) {
+    await pace(batch);
+    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
     const body = { target_lang: target.providerCode, preserve_formatting: true, text: batch.map(record => record.source) };
     if (config.model && config.model !== 'default') body.model_type = config.model;
     const response = await fetch(endpoint, { method: 'POST', headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
@@ -107,11 +152,12 @@ async function deepLTranslate(records, config, rules, progress) {
     const payload = await response.json();
     if (!Array.isArray(payload.translations) || payload.translations.length !== batch.length) throw new Error('DeepL response count mismatch');
     batch.forEach((record, index) => { result[record.id] = payload.translations[index].text; });
-    if (progress) progress(start + batch.length, batch[batch.length - 1] && batch[batch.length - 1].modId);
+    processed += batch.length;
+    if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
-async function geminiTranslate(records, config, rules, progress) {
+async function geminiTranslate(batches, config, rules, progress, plannedWaitSeconds) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const model = config.model || 'gemini-2.5-flash-lite';
   const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(config.apiKey);
@@ -119,24 +165,22 @@ async function geminiTranslate(records, config, rules, progress) {
   // Gemini free-tier request-per-minute limits are commonly tighter than the
   // batch size allows. Space independent batches instead of firing hundreds
   // of requests in one burst; a provider config may raise/lower this value.
-  const minimumIntervalMs = Number.isFinite(Number(config.geminiMinIntervalMs)) ? Math.max(0, Number(config.geminiMinIntervalMs)) : 6000;
-  let lastRequestAt = 0;
-  for (let start = 0; start < records.length; start += 40) {
-    const batch = records.slice(start, start + 40);
-    if (progress) progress(start, batch[0] && batch[0].modId);
+  const geminiConfig = { ...config, minRequestIntervalMs: Number.isFinite(Number(config.geminiMinIntervalMs)) ? Number(config.geminiMinIntervalMs) : config.minRequestIntervalMs };
+  const pace = createPacer(pacingSettings(geminiConfig, 'gemini'), progress, plannedWaitSeconds); let processed = 0;
+  for (const batch of batches) {
+    await pace(batch);
+    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
     const prompt = 'Translate each English value to ' + target.name + '. Return only a JSON object mapping each id to its translated string. Preserve every placeholder exactly. Input: ' + JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key })));
-    const waitMs = minimumIntervalMs - (Date.now() - lastRequestAt);
-    if (waitMs > 0) await sleep(waitMs);
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
-    lastRequestAt = Date.now();
-    const response = await fetchWithBackoff('Gemini batch ' + (Math.floor(start / 40) + 1), request, config, (status, attempt, delay) => progress && progress(start, batch[0] && batch[0].modId, { status, attempt, delay, retry: true }));
+    const response = await fetchWithBackoff('Gemini batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0] && batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Gemini HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     const content = payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts && payload.candidates[0].content.parts.map(x => x.text || '').join('');
     if (!content) throw new Error('Gemini response missing candidates[0].content.parts.text');
     const parsed = JSON.parse(content); const translations = parsed.translations || parsed;
     for (const record of batch) result[record.id] = translations[record.id];
-    if (progress) progress(start + batch.length, batch[batch.length - 1] && batch[batch.length - 1].modId);
+    processed += batch.length;
+    if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
@@ -162,23 +206,26 @@ async function main() {
     } else direct.push({ ...record, target: null, status: 'pending_provider', method: null, appliedRules: [] });
   }
   const providerRecords = direct.filter(r => r.status === 'pending_provider'); let providerMap = {};
+  const providerName = config.provider === 'deepl' ? 'deepl' : config.provider === 'gemini' ? 'gemini' : 'openai';
+  const providerBatches = requestBatches(providerRecords, config);
+  const plannedWaitSeconds = estimatedWaitSeconds(providerBatches, pacingSettings(config.provider === 'gemini' && Number.isFinite(Number(config.geminiMinIntervalMs)) ? { ...config, minRequestIntervalMs: Number(config.geminiMinIntervalMs) } : config, providerName));
   const baseCompleted = reusable.length + direct.filter(r => r.status === 'validated').length;
   const baseFailed = unresolved.length;
   const total = reusable.length + pending.length;
   let retries = 0;
-  const updateProgress = (processed, currentMod, retry) => {
-    if (retry && retry.retry) retries++;
+  const updateProgress = (processed, currentMod, details = {}) => {
+    if (details.retry) retries++;
     writeStatus(statusFile, {
-      state: 'running', phase: 'translating', message: retry && retry.retry ? `Retrying after HTTP ${retry.status} (${retry.attempt}/5).` : 'Translating selected mod text.',
-      total, completed: baseCompleted + processed, reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || ''
+      state: 'running', phase: details.phase || 'translating', message: details.message || (details.retry ? `Retrying after HTTP ${details.status} (${details.attempt}/5).` : 'Translating selected mod text.'),
+      total, completed: baseCompleted + (processed || 0), reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || '', waitSeconds: details.waitSeconds || 0, estimatedWaitSeconds: details.estimatedWaitSeconds || plannedWaitSeconds
     });
   };
-  updateProgress(0, providerRecords[0] && providerRecords[0].modId);
+  updateProgress(0, providerRecords[0] && providerRecords[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   if (providerRecords.length && (dryRun || config.apiKey)) {
     if (dryRun) for (const record of providerRecords) providerMap[record.id] = dryTranslate(record.source, rules);
-    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerRecords, config, rules, updateProgress);
-    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerRecords, config, rules, updateProgress);
-    else providerMap = await apiTranslate(providerRecords, config, rules, updateProgress);
+    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds);
+    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds);
+    else providerMap = await apiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds);
   } else if (providerRecords.length) throw new Error('No provider API key. Use --dry-run or configure provider.local.json.');
   const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
     const target = providerMap[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target);

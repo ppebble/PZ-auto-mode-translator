@@ -28,7 +28,7 @@ function Read-Ini([string]$Path) {
 }
 function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{}) {
     $lines = @("state=$State", "message=$Message")
-    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod')) {
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','waitSeconds','estimatedWaitSeconds','errorCode')) {
         if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
     }
     $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
@@ -37,13 +37,18 @@ function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{
 function Friendly-Error([string]$Raw) {
     $text = ($Raw -replace '\s+', ' ').Trim()
     if ($text -match 'DeepL HTTP 456|DeepL quota insufficient') { return 'DeepL quota is exhausted or too small for this job. Check the DeepL account usage and billing period, then retry.' }
-    if ($text -match 'Gemini HTTP 429') { return 'Gemini rejected the request because of a rate limit or quota. Wait for the quota window, check the selected model/project quota, then retry.' }
-    if ($text -match 'HTTP 429') { return 'The provider rejected the request because of a rate limit or quota. Wait, check provider usage, then retry.' }
+    if ($text -match 'Gemini HTTP 429') { return 'HTTP 429: Gemini rate limit or quota. Wait for the quota window, check the selected model/project quota, then retry.' }
+    if ($text -match 'HTTP 429') { return 'HTTP 429: Provider rate limit or quota. Wait, check provider usage, then retry.' }
     if ($text -match 'HTTP 401|HTTP 403|API key') { return 'The provider rejected the API key or account permission. Recheck the key, selected project, and model access.' }
     if ($text -match 'No provider API key') { return 'No API key is saved. Enter and apply an API key in Mod Options before queueing translation.' }
     if ($text -match 'node.+not recognized|node.+not found') { return 'Node.js 20 LTS or later is required by the Translation Helper. Install Node.js, then restart the Helper.' }
     if ($text -match 'timed out|Timeout') { return 'The provider request timed out. Check the network and provider status, then retry.' }
     return 'Translation failed: ' + $text
+}
+function Get-ErrorCode([string]$Raw) {
+    $match = [regex]::Match($Raw, '(?:HTTP|status)\s*(\d{3})', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($match.Success) { return $match.Groups[1].Value }
+    return ''
 }
 
 New-Item -ItemType Directory -Force -Path $lua, (Split-Path $providerJson -Parent) | Out-Null
@@ -105,7 +110,8 @@ try {
         $last = if (Test-Path -LiteralPath $status) { Read-Ini $status } else { @{} }
         $previousFailed = 0
         if ($last.ContainsKey('failed')) { $previousFailed = [int]$last.failed }
-        Write-Status 'failed' (Friendly-Error $_.Exception.Message) @{ phase = 'failed'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = ($previousFailed + 1); retries = $last.retries; currentMod = $last.currentMod }
+        $errorCode = Get-ErrorCode $_.Exception.Message
+        Write-Status 'failed' (Friendly-Error $_.Exception.Message) @{ phase = 'failed'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = ($previousFailed + 1); retries = $last.retries; currentMod = $last.currentMod; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; errorCode = $errorCode }
         Write-Warning $_.Exception.Message
         # A failed request must not be retried forever: it can repeatedly spend
         # provider quota or hide the original error behind a rapid status loop.
