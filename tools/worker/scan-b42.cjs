@@ -145,6 +145,23 @@ function loadTranslationMemory(file) {
       .map(record => [record.id, record.target]));
   } catch { return new Map(); }
 }
+function effectiveTargetMap(mods) {
+  const map = new Map();
+  for (const mod of mods) {
+    if (!mod.dir) continue;
+    for (const rootInfo of findTranslateRoots(mod.dir)) {
+      const dir = path.join(rootInfo.translateRoot, targetLanguage);
+      if (!fs.existsSync(dir)) continue;
+      for (const file of fs.readdirSync(dir).filter(x => x.toLowerCase().endsWith('.json'))) {
+        const parsed = parseObject(path.join(dir, file));
+        if (parsed.error || !parsed.value || Array.isArray(parsed.value)) continue;
+        const category = path.basename(file, '.json').toLowerCase();
+        for (const [key, value] of Object.entries(parsed.value)) if (isTranslatable(value)) map.set(category + '|' + key, { target: value, modId: mod.id });
+      }
+    }
+  }
+  return map;
+}
 function main() {
   if (!fs.existsSync(defaultList)) throw new Error(`Active mod list not found: ${defaultList}`);
   const ids = activeIds(readText(defaultList));
@@ -152,7 +169,8 @@ function main() {
   const records = new Map();
   const errors = [];
   const memory = loadTranslationMemory(translationMemoryPath);
-  const summary = { gameVersion, activeMods: ids.length, resolvedMods: 0, unresolvedMods: 0, excludedMods: 0, skippedModsWithTarget: 0, translateRoots: 0, files: 0, scriptFiles: 0, craftRecipes: 0, existing: 0, existing_generated: 0, reused: 0, pending: 0, normalizedJson: 0, errors: 0 };
+  const overlays = effectiveTargetMap(mods);
+  const summary = { gameVersion, activeMods: ids.length, resolvedMods: 0, unresolvedMods: 0, excludedMods: 0, skippedModsWithTarget: 0, translateRoots: 0, files: 0, scriptFiles: 0, craftRecipes: 0, existing: 0, existing_overlay: 0, existing_generated: 0, reused: 0, pending: 0, normalizedJson: 0, errors: 0 };
 
   for (const mod of mods) {
     if (excluded.has(mod.id) || (included.size > 0 && !included.has(mod.id))) { summary.excludedMods++; continue; }
@@ -190,14 +208,17 @@ function main() {
           if (!isTranslatable(value)) continue;
           const id = `${mod.id}|${category}|${key}|${sha256(value)}`;
           const reusedTarget = memory.get(id);
-          const status = isTranslatable(target[key]) ? 'existing' : (reusedTarget ? 'existing_generated' : 'pending');
+          const overlay = overlays.get(category.toLowerCase() + '|' + key);
+          const externalOverlay = overlay && overlay.modId !== mod.id && overlay.modId !== 'PZAITranslationGenerated';
+          const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated';
+          const status = isTranslatable(target[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedOverlay) ? 'existing_generated' : 'pending'));
           summary[status]++;
           // Version-specific B42 files intentionally replace common files for the same key.
           records.set(`${mod.id}|${category.toLowerCase()}|${key}`, {
             id,
             modId: mod.id, modPath: mod.dir, category, sourceFile,
             layout: rootInfo.layout, layoutVersion: rootInfo.version,
-            key, source: value, target: isTranslatable(target[key]) ? target[key] : (reusedTarget || null),
+            key, source: value, target: isTranslatable(target[key]) ? target[key] : (reusedTarget || (generatedOverlay ? overlay.target : (externalOverlay ? overlay.target : null))),
             targetLanguage, sourceHash: sha256(value), status,
           });
         }
@@ -222,13 +243,14 @@ function main() {
         // source when the mod supplies one; scripts fill only missing keys.
         if (records.has(recordKey)) continue;
         summary.craftRecipes++;
+        const id = `${mod.id}|Recipes|${key}|${sha256(key)}`; const overlay = overlays.get('recipes|' + key); const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated'; const externalOverlay = overlay && overlay.modId !== mod.id && !generatedOverlay;
         records.set(recordKey, {
-          id: `${mod.id}|Recipes|${key}|${sha256(key)}`,
+          id,
           modId: mod.id, modPath: mod.dir, category: 'Recipes',
           sourceFile: '@scripts/' + path.relative(mod.dir, script.file).replace(/\\/g, '/'),
           layout: script.layout, layoutVersion: script.version,
-          key, source: key, target: memory.get(`${mod.id}|Recipes|${key}|${sha256(key)}`) || null,
-          targetLanguage, sourceHash: sha256(key), status: memory.has(`${mod.id}|Recipes|${key}|${sha256(key)}`) ? 'existing_generated' : 'pending', sourceKind: 'craftRecipe',
+          key, source: key, target: memory.get(id) || (overlay && overlay.target) || null,
+          targetLanguage, sourceHash: sha256(key), status: externalOverlay ? 'existing_overlay' : ((memory.has(id) || generatedOverlay) ? 'existing_generated' : 'pending'), sourceKind: 'craftRecipe',
         });
       }
     }
@@ -239,7 +261,7 @@ function main() {
   summary.pending = finalRecords.filter(x => x.status === 'pending').length;
   const perMod = new Map();
   for (const record of finalRecords) {
-    if (!perMod.has(record.modId)) perMod.set(record.modId, { modId: record.modId, existing: 0, reused: 0, pending: 0, craftRecipes: 0 });
+    if (!perMod.has(record.modId)) perMod.set(record.modId, { modId: record.modId, existing: 0, existing_overlay: 0, existing_generated: 0, reused: 0, pending: 0, craftRecipes: 0 });
     const stat = perMod.get(record.modId); stat[record.status]++; if (record.sourceKind === 'craftRecipe') stat.craftRecipes++;
   }
   const result = { schema: 'pzat-scan-v1', generatedAt: new Date().toISOString(), targetLanguage, gameVersion, excluded: [...excluded], included: [...included], skipModsWithTarget, translationMemory: { path: translationMemoryPath, reused: summary.reused }, summary, modSummary: [...perMod.values()].sort((a, b) => a.modId.localeCompare(b.modId)), errors, records: finalRecords };
