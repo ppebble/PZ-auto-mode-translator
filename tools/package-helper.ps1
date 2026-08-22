@@ -35,7 +35,8 @@ $hashLines = Get-ChildItem -LiteralPath $stage -Recurse -File | Where-Object { $
 }
 [System.IO.File]::WriteAllLines((Join-Path $stage 'SHA256SUMS.txt'), $hashLines, (New-Object System.Text.UTF8Encoding($false)))
 
-Copy-Item -LiteralPath $stage -Destination $release -Recurse
+New-Item -ItemType Directory -Force -Path $release | Out-Null
+Copy-Item -Path (Join-Path $stage '*') -Destination $release -Recurse
 Compress-Archive -LiteralPath $release -DestinationPath $archive -CompressionLevel Optimal
 Remove-Item -LiteralPath $stage -Recurse -Force
 
