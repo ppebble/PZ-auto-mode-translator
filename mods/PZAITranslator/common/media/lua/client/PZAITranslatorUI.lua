@@ -46,7 +46,9 @@ function Selector:drawTargetItem(y, item, alt)
     local apiRight, warningX = self:getWidth() - 75, self:getWidth() - 65
     self:drawTextCentre(entry.selected and "[x]" or "[ ]", 24, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
     local nameRight = self:getWidth() - 360
-    self:drawText(self:truncateCellText(entry.name, nameRight - 56), 48, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+    -- doDrawItem is invoked with the ISScrollingListBox as self, not Selector.
+    -- Keep the measurement helper on Selector and pass the list's font explicitly.
+    self:drawText(Selector.truncateCellText(self, entry.name or "", math.max(20, nameRight - 56)), 48, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
     if stat then
         self:drawTextRight(tostring(stat.candidates or 0), candidatesRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
         self:drawTextRight(tostring(entry.existing or 0), translatedRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
