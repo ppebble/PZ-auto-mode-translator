@@ -1,46 +1,24 @@
 #!/usr/bin/env node
 'use strict';
 
-// These limits are deliberately below documented request ceilings. They are
-// fixed in the Helper rather than exposed as a game option: users should not
-// have to tune provider quota math to translate a mod.
 const PROFILES = Object.freeze({
-  // Gemini quota varies by model/project tier. 8k source characters leaves a
-  // large TPM margin even for conservative accounts; pacing handles RPM.
   gemini: Object.freeze({ maxItems: 100, maxChars: 8000 }),
-  // DeepL accepts a 128 KiB request and multiple text values. This stays well
-  // beneath that payload boundary while retaining useful request efficiency.
   deepl: Object.freeze({ maxItems: 100, maxChars: 10000 }),
-  // OpenAI model limits depend on the account tier; 8k source characters is
-  // comfortably below the documented Tier-1 TPM and model context limits.
   openai: Object.freeze({ maxItems: 100, maxChars: 8000 }),
-  // DeepSeek exposes an OpenAI-compatible chat endpoint. Keep the same small
-  // source payload and disable thinking in the adapter to avoid translation
-  // output consuming a reasoning budget.
   deepseek: Object.freeze({ maxItems: 100, maxChars: 8000 }),
-  // Claude's Messages API requires an explicit output-token cap. A smaller
-  // 6k-character batch leaves headroom for both JSON ids and translated text.
   claude: Object.freeze({ maxItems: 50, maxChars: 6000 }),
-  // A custom OpenAI-compatible endpoint has no reliable common quota contract.
   'openai-compatible': Object.freeze({ maxItems: 20, maxChars: 3000 }),
-  // Yandex Translate permits at most 10,000 characters in texts per request.
-  // Reserve 20% for provider-side accounting and request metadata.
   yandex: Object.freeze({ maxItems: 100, maxChars: 8000 })
 });
 
-function providerBatchProfile(provider) {
-  return PROFILES[provider] || PROFILES['openai-compatible'];
-}
-
+function providerBatchProfile(provider) { return PROFILES[provider] || PROFILES['openai-compatible']; }
 function recordChars(record) { return Array.from(record.source || '').length; }
-
 function requestBatches(records, provider) {
   const { maxItems, maxChars } = providerBatchProfile(provider);
   const batches = []; let batch = []; let chars = 0;
   for (const record of records) {
     const length = recordChars(record);
-    // Never combine mods: this keeps progress, pause, and resume reporting
-    // clear to the player.
+    // Never combine mods: progress, pause, and resume remain understandable.
     if (batch.length && (batch[0].modId !== record.modId || batch.length >= maxItems || chars + length > maxChars)) {
       batches.push(batch); batch = []; chars = 0;
     }
@@ -50,4 +28,19 @@ function requestBatches(records, provider) {
   return batches;
 }
 
-module.exports = { PROFILES, providerBatchProfile, requestBatches, recordChars };
+function configuredCost(records, provider, estimate = {}) {
+  const sourceChars = records.reduce((total, record) => total + recordChars(record), 0);
+  const requestCount = requestBatches(records, provider).length;
+  const inputTokens = Math.ceil(sourceChars / 4);
+  const outputTokens = Math.ceil(inputTokens * Number(estimate.outputTokenMultiplier || 1));
+  const characterRate = Number(estimate.usdPerMillionCharacters);
+  const inputRate = Number(estimate.usdPerMillionInputTokens);
+  const outputRate = Number(estimate.usdPerMillionOutputTokens);
+  let estimatedCostUsd = null;
+  if (estimate.enabled === true && Number.isFinite(characterRate) && characterRate >= 0) estimatedCostUsd = sourceChars / 1e6 * characterRate;
+  else if (estimate.enabled === true && Number.isFinite(inputRate) && inputRate >= 0 && Number.isFinite(outputRate) && outputRate >= 0) estimatedCostUsd = inputTokens / 1e6 * inputRate + outputTokens / 1e6 * outputRate;
+  if (estimatedCostUsd !== null) estimatedCostUsd = Number(estimatedCostUsd.toFixed(8));
+  return { sourceChars, requestCount, inputTokens, outputTokens, estimatedCostUsd };
+}
+
+module.exports = { PROFILES, providerBatchProfile, requestBatches, recordChars, configuredCost };

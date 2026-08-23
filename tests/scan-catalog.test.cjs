@@ -15,6 +15,7 @@ const translated = path.join(root, 'translated.json');
 const catalog = path.join(home, 'Lua', 'PZAITranslator_catalog.ini');
 const memory = path.join(root, 'memory.json');
 const resumeMemory = path.join(root, 'resume-memory.json');
+const status = path.join(root, 'status.ini');
 const hash = text => crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 
 function mod(id, translations) {
@@ -41,14 +42,25 @@ try {
   const manifest = JSON.parse(fs.readFileSync(output, 'utf8'));
   assert.equal(manifest.modSummary.length, 3);
   const stat = manifest.modSummary.find(item => item.modId === 'MainMod');
-  assert.deepEqual({ ...stat, updatedAt: 0 }, { modId: 'MainMod', candidates: 4, existing: 1, existing_overlay: 1, existing_generated: 1, reused: 0, pending: 1, craftRecipes: 0, sourceChars: 47, apiChars: 9, updatedAt: 0, steamUpdatedAt: 0, metadataSource: 'local_file' });
+  assert.deepEqual({ ...stat, updatedAt: 0 }, { modId: 'MainMod', candidates: 4, existing: 1, existing_overlay: 1, existing_generated: 1, reused: 0, pending: 1, craftRecipes: 0, sourceChars: 47, apiChars: 9, large: 0, updatedAt: 0, steamUpdatedAt: 0, metadataSource: 'local_file' });
   assert.ok(stat.updatedAt > 0);
   for (const emptyMod of manifest.modSummary.filter(item => item.modId !== 'MainMod')) assert.equal(emptyMod.candidates, 0);
   const catalogLines = ['schema=pzat-catalog-v1', 'generatedAt=' + manifest.generatedAt, 'targetLanguage=KO'];
-  for (const item of manifest.modSummary) catalogLines.push('mod=' + item.modId, 'candidates=' + item.candidates, 'existing=' + item.existing, 'existing_overlay=' + item.existing_overlay, 'existing_generated=' + item.existing_generated, 'pending=' + item.pending, 'sourceChars=' + item.sourceChars, 'apiChars=' + item.apiChars, 'updatedAt=' + item.updatedAt, 'steamUpdatedAt=' + item.steamUpdatedAt, 'metadataSource=' + item.metadataSource);
+  for (const item of manifest.modSummary) catalogLines.push('mod=' + item.modId, 'candidates=' + item.candidates, 'existing=' + item.existing, 'existing_overlay=' + item.existing_overlay, 'existing_generated=' + item.existing_generated, 'pending=' + item.pending, 'sourceChars=' + item.sourceChars, 'apiChars=' + item.apiChars, 'large=' + item.large, 'updatedAt=' + item.updatedAt, 'steamUpdatedAt=' + item.steamUpdatedAt, 'metadataSource=' + item.metadataSource);
   assert.equal(fs.readFileSync(catalog, 'utf8'), catalogLines.join('\n') + '\n');
-  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--translation-memory', resumeMemory, '--dry-run'], { stdio: 'pipe' });
-  const translation = JSON.parse(fs.readFileSync(translated, 'utf8'));
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--translation-memory', resumeMemory, '--status-file', status, '--dry-run'], { stdio: 'pipe' });
+  const statusText = fs.readFileSync(status, 'utf8');
+  assert.match(statusText, /apiCharacters=9/);
+  assert.match(statusText, /requestCount=1/);
+  assert.match(statusText, /estimatedInputTokens=3/);
+  const pauseFile = path.join(root, 'pause.ini');
+  const pausedStatus = path.join(root, 'paused-status.ini');
+  const provider = path.join(root, 'provider.json');
+  fs.writeFileSync(pauseFile, 'paused=1\n', 'utf8');
+  fs.writeFileSync(provider, JSON.stringify({ provider: 'openai', baseUrl: 'http://127.0.0.1:1', model: 'test', apiKey: 'test' }), 'utf8');
+  const paused = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--provider', provider, '--output', path.join(root, 'paused-output.json'), '--translation-memory', path.join(root, 'paused-memory.json'), '--status-file', pausedStatus, '--pause-file', pauseFile], { encoding: 'utf8' });
+  assert.notEqual(paused.status, 0);
+  assert.match(fs.readFileSync(pausedStatus, 'utf8'), /phase=paused/);  const translation = JSON.parse(fs.readFileSync(translated, 'utf8'));
   assert.deepEqual(translation.summary, { pending: 1, reused: 1, validated: 2, needsReview: 0 });
   assert.deepEqual(translation.records.map(record => [record.key, record.method]).sort(), [
     ['generated', 'translation-memory'], ['pending', 'dry-run']
@@ -76,7 +88,10 @@ try {
   assert.equal(workshop.updatedAt, 1700000000);
   assert.equal(workshop.steamUpdatedAt, 1700000000);
   assert.equal(workshop.metadataSource, 'steam_install_update');
-  console.log('scan catalog test passed');
+  mod('OversizeMod', { EN: { oversized: 'x'.repeat(20000) } });
+  fs.writeFileSync(path.join(home, 'mods', 'default.txt'), 'mod=OversizeMod\n', 'utf8');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output], { stdio: 'pipe' });
+  assert.equal(JSON.parse(fs.readFileSync(output, 'utf8')).modSummary[0].large, 1);  console.log('scan catalog test passed');
 } finally {
   fs.rmSync(root, { recursive: true, force: true });
 }

@@ -67,6 +67,7 @@ local function statusLabel()
         needs_configuration = "Configuration required - enter a new API key and provider.",
         queued = "Queued - Helper has not confirmed this job. Start Translation Helper if it stays queued.",
         running = "Running - local helper is processing the job.",
+        paused = "Paused - no later batch will be sent. Resume uses saved completed batches.",
         complete = "Complete - enable PZAITranslationGenerated, return to the main menu, then enter the world again.",
         failed = "Failed - completed batches are saved. Change the model if needed, then resume."
     }
@@ -77,6 +78,10 @@ local function statusLabel()
     local retries = tonumber(info.retries or "0") or 0
     local waitSeconds = tonumber(info.waitSeconds or "0") or 0
     local estimatedWaitSeconds = tonumber(info.estimatedWaitSeconds or "0") or 0
+    local apiCharacters = tonumber(info.apiCharacters or "0") or 0
+    local requestCount = tonumber(info.requestCount or "0") or 0
+    local inputTokens = tonumber(info.estimatedInputTokens or "0") or 0
+    local cost = info.estimatedCostUsd or ""
     local function duration(seconds)
         if seconds < 60 then return tostring(seconds) .. "s" end
         return tostring(math.floor(seconds / 60)) .. "m " .. tostring(seconds % 60) .. "s"
@@ -84,6 +89,8 @@ local function statusLabel()
     local progress = total > 0 and (tostring(completed) .. "/" .. tostring(total) .. " | Reused " .. tostring(reused) .. " | Failed " .. tostring(failed) .. " | Retries " .. tostring(retries)) or "No item count yet"
     if estimatedWaitSeconds > 0 then progress = progress .. " | Planned wait ~" .. duration(estimatedWaitSeconds) end
     if waitSeconds > 0 then progress = progress .. " | Next batch in " .. duration(waitSeconds) end
+    if apiCharacters > 0 then progress = progress .. " | Plan " .. tostring(apiCharacters) .. " chars / " .. tostring(requestCount) .. " requests / ~" .. tostring(inputTokens) .. " input tokens" end
+    if cost ~= "" then progress = progress .. " / ~$" .. tostring(cost) end
     local failure = state == "failed" and info.errorCode and info.errorCode ~= "" and (" (HTTP " .. tostring(info.errorCode) .. ")") or ""
     return (labels[state] or tostring(state)) .. failure .. " | " .. progress
 end
@@ -139,13 +146,18 @@ local function resumeTranslation()
     if saveSettings() then PZAITranslator.requestTranslation("resume") end
     refreshStatus()
 end
+local function pauseTranslation()
+    PZAITranslator.requestPause()
+    refreshStatus()
+end
 local function testConnection()
     if saveSettings() then PZAITranslator.requestConnectionTest() end
     refreshStatus()
 end
 options:addButton("testConnection", "Test API: Hello, World!", "Uses the selected provider to translate Hello, World! and reports the result without scanning or generating a pack.", testConnection)
 options:addButton("queueTranslation", "Start new translation", "Scan the selected mods and translate their missing strings. Saved translations are always reused.", queueTranslation)
-options:addButton("resumeTranslation", "Resume interrupted translation", "After a quota or provider failure, save the selected model and resume from completed batch checkpoints. Use the same selected mods and target language.", resumeTranslation)
+options:addButton("pauseTranslation", "Pause after current request", "Stops before the next batch. The current request may complete; saved completed batches will be reused when resumed.", pauseTranslation)
+options:addButton("resumeTranslation", "Resume interrupted translation", "After a pause, quota, or provider failure, save the selected model and resume from completed batch checkpoints. Use the same selected mods and target language.", resumeTranslation)
 options:addButton("refreshStatus", "Refresh status", "Read the result written by the local helper.", refreshStatus)
 
 -- MainOptions does not rebuild its page after a button callback. Polling only

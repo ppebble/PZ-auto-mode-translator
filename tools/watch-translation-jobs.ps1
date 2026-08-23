@@ -16,6 +16,7 @@ $job = Join-Path $lua 'PZAITranslator_job.ini'
 $providerIni = Join-Path $lua 'PZAITranslator_provider.ini'
 $providerJson = Join-Path $root 'runtime\provider-from-game.json'
 $status = Join-Path $lua 'PZAITranslator_status.ini'
+$pause = Join-Path $lua 'PZAITranslator_pause.ini'
 $lock = Join-Path $lua 'PZAITranslator_helper.lock'
 
 function Read-Ini([string]$Path) {
@@ -28,7 +29,7 @@ function Read-Ini([string]$Path) {
 }
 function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{}) {
     $lines = @("state=$State", "message=$Message")
-    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','waitSeconds','estimatedWaitSeconds','errorCode')) {
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','waitSeconds','estimatedWaitSeconds','errorCode','apiCharacters','requestCount','estimatedInputTokens','estimatedOutputTokens','estimatedCostUsd')) {
         if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
     }
     $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
@@ -44,6 +45,11 @@ function Friendly-Error([string]$Raw) {
     if ($text -match 'node.+not recognized|node.+not found') { return 'Node.js 20 LTS or later is required by the Translation Helper. Install Node.js, then restart the Helper.' }
     if ($text -match 'timed out|Timeout') { return 'The provider request timed out. Check the network and provider status, then retry.' }
     return 'Translation failed: ' + $text
+}
+function Read-CostEstimate {
+    $localProvider = Join-Path $root 'config\provider.local.json'
+    if (-not (Test-Path -LiteralPath $localProvider)) { return $null }
+    try { return ((Get-Content -LiteralPath $localProvider -Raw -Encoding utf8 | ConvertFrom-Json).costEstimate) } catch { return $null }
 }
 function Get-ErrorCode([string]$Raw) {
     $match = [regex]::Match($Raw, '(?:HTTP|status)\s*(\d{3})', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
@@ -79,8 +85,10 @@ try {
         if (-not (Test-Path -LiteralPath $providerIni)) { throw 'Save provider settings in Mod Options before queuing a job.' }
         $settings = Read-Ini $providerIni
         if ([string]::IsNullOrWhiteSpace($settings.apiKey) -or [string]::IsNullOrWhiteSpace($settings.model)) { throw 'API key and model are required.' }
-        @{ provider = $settings.provider; baseUrl = $settings.baseUrl; model = $settings.model; apiKey = $settings.apiKey } |
-            ConvertTo-Json | Set-Content -LiteralPath $providerJson -Encoding utf8
+        $runtimeProvider = @{ provider = $settings.provider; baseUrl = $settings.baseUrl; model = $settings.model; apiKey = $settings.apiKey }
+        $costEstimate = Read-CostEstimate
+        if ($null -ne $costEstimate) { $runtimeProvider.costEstimate = $costEstimate }
+        $runtimeProvider | ConvertTo-Json | Set-Content -LiteralPath $providerJson -Encoding utf8
         $language = $request.targetLanguage
         if ([string]::IsNullOrWhiteSpace($language)) { $language = 'KO' }
         if ($request.action -eq 'test_connection') {
@@ -97,9 +105,10 @@ try {
             continue
         }
         if ($request.action -ne 'translate' -and $request.action -ne 'resume') { throw 'Unsupported local job action.' }
+        if (($request.action -eq 'translate' -or $request.action -eq 'resume') -and (Test-Path -LiteralPath $pause)) { Remove-Item -LiteralPath $pause -Force }
         $startMessage = if ($request.action -eq 'resume') { 'Resuming translation from saved checkpoints with the selected provider/model.' } else { 'Starting translation job.' }
         Write-Status 'running' $startMessage @{ phase = 'scanning'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
-        $runArgs = @{ ZomboidHome = $ZomboidHome; TargetLanguage = $language; Provider = $providerJson; StatusFile = $status; Install = $true }
+        $runArgs = @{ ZomboidHome = $ZomboidHome; TargetLanguage = $language; Provider = $providerJson; StatusFile = $status; PauseFile = $pause; Install = $true }
         if ($request.skipModsWithTarget -eq '1') { $runArgs.SkipModsWithTarget = $true }
         if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $runArgs.IncludeMods = $request.includeMods }
         & (Join-Path $PSScriptRoot 'run-translation.ps1') @runArgs
@@ -110,6 +119,11 @@ try {
         $last = if (Test-Path -LiteralPath $status) { Read-Ini $status } else { @{} }
         $previousFailed = 0
         if ($last.ContainsKey('failed')) { $previousFailed = [int]$last.failed }
+        if ($_.Exception.Message -match 'Translation paused by user') {
+            Write-Status 'paused' 'Paused. Completed batches were saved; use Resume interrupted translation when ready.' @{ phase = 'paused'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = $last.currentMod; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; apiCharacters = $last.apiCharacters; requestCount = $last.requestCount; estimatedInputTokens = $last.estimatedInputTokens; estimatedOutputTokens = $last.estimatedOutputTokens; estimatedCostUsd = $last.estimatedCostUsd }
+            if (Test-Path -LiteralPath $job) { Move-Item -LiteralPath $job -Destination ($job + '.paused') -Force }
+            continue
+        }
         $errorCode = Get-ErrorCode $_.Exception.Message
         Write-Status 'failed' (Friendly-Error $_.Exception.Message) @{ phase = 'failed'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = ($previousFailed + 1); retries = $last.retries; currentMod = $last.currentMod; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; errorCode = $errorCode }
         Write-Warning $_.Exception.Message

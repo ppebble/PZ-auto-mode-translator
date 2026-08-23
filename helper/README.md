@@ -34,3 +34,4 @@ Double-click `STOP-TranslationHelper.vbs`. It stops only this helper and never c
 - Stuck at `queued`: start the helper. If it says it is already running, it is ready for requests.
 - `429` or `456`: the API provider has rejected the request because of a quota or rate limit. Check that provider's dashboard for the selected project and model.
 - No translation appears: enable the generated pack, return to the main menu, and enter the world again.
+- Some text can still remain English when a source mod displays a literal Lua string rather than a `Translate/EN` localization key. The Helper never edits Workshop source mods, so retrying translation cannot change that case. SaucedCarts' hard-coded `Shopping Cart` cart name is one known example; its normal tooltips and localization keys can still translate.

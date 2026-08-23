@@ -16,7 +16,7 @@ function Selector:initialise()
     self.searchEntry = ISTextEntryBox:new("", label:getRight() + 8, 34, self.width - 730, 28)
     self.searchEntry.font = UIFont.Small; self.searchEntry.onTextChange = function() self:refresh() end; self.searchEntry:initialise(); self.searchEntry:instantiate(); self.searchEntry:setClearButton(true); self:addChild(self.searchEntry)
     self.filterChoice = ISComboBox:new(self.width - 500, 34, 200, 28, self, Selector.refresh)
-    self.filterChoice:initialise(); self.filterChoice:addOption("All mods"); self.filterChoice:addOption("Needs API translation"); self.filterChoice:addOption("Has existing translation"); self.filterChoice.selected = 1; self:addChild(self.filterChoice)
+    self.filterChoice:initialise(); self.filterChoice:addOption("All mods"); self.filterChoice:addOption("Needs API translation"); self.filterChoice:addOption("Has existing translation"); self.filterChoice:addOption("Large API load (20k+ chars)"); self.filterChoice:addOption("Selected mods"); self.filterChoice.selected = 1; self:addChild(self.filterChoice)
     self.sortChoice = ISComboBox:new(self.width - 280, 34, 260, 28, self, Selector.refresh)
     self.sortChoice:initialise(); self.sortChoice:addOption("Load order"); self.sortChoice:addOption("Recently updated"); self.sortChoice:addOption("Recent Steam install/update"); self.sortChoice:addOption("Most API characters"); self.sortChoice:addOption("Most API candidates"); self.sortChoice.selected = 1; self:addChild(self.sortChoice)
     self.list = ISScrollingListBox:new(20, 76, self.width - 40, self.height - 142)
@@ -27,15 +27,22 @@ function Selector:initialise()
         if item then
             item.item.selected = not item.item.selected; self.selectedById[item.item.id] = item.item.selected
             item.text = (item.item.selected and "[x] " or "[ ] ") .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+            self:updateSelectionTitle()
         end
     end
     self:addChild(self.list)
     self.allButton = ISButton:new(12, self.height - 42, 100, 28, "All", self, Selector.selectAll); self.allButton:initialise(); self:addChild(self.allButton)
     self.noneButton = ISButton:new(118, self.height - 42, 100, 28, "None", self, Selector.selectNone); self.noneButton:initialise(); self:addChild(self.noneButton)
+    self.largeButton = ISButton:new(330, self.height - 42, 130, 28, "Select large mods", self, Selector.selectLarge); self.largeButton:initialise(); self:addChild(self.largeButton)
     self.refreshButton = ISButton:new(224, self.height - 42, 100, 28, "Refresh", self, Selector.refresh); self.refreshButton:initialise(); self:addChild(self.refreshButton)
     self.saveButton = ISButton:new(self.width - 212, self.height - 42, 95, 28, "Save", self, Selector.save); self.saveButton:initialise(); self:addChild(self.saveButton)
     self.closeButton = ISButton:new(self.width - 111, self.height - 42, 95, 28, "Close", self, Selector.close); self.closeButton:initialise(); self:addChild(self.closeButton)
     self:refresh()
+end
+function Selector:updateSelectionTitle()
+    local selectedCount = 0
+    for _, selected in pairs(self.selectedById or {}) do if selected then selectedCount = selectedCount + 1 end end
+    self.title:setNameWithoutMoving("Translation targets - selected " .. tostring(selectedCount) .. " mod(s)")
 end
 function Selector:refresh()
     self.selectedById = self.selectedById or {}
@@ -60,9 +67,10 @@ function Selector:refresh()
             self.selectedById[id] = selected
             local stat = catalog[id]
             local existing = stat and ((stat.existing or 0) + (stat.existing_overlay or 0) + (stat.existing_generated or 0)) or 0
-            local statistics = stat and (" | Candidates " .. tostring(stat.candidates or 0) .. " | Existing " .. tostring(existing) .. " | API " .. tostring(stat.pending or 0) .. " (~" .. tostring(stat.apiChars or 0) .. " chars)") or " | Scan stats unavailable"
+            local largeWarning = stat and stat.large == 1 and " | LARGE: select separately" or ""
+            local statistics = stat and (" | Candidates " .. tostring(stat.candidates or 0) .. " | Existing " .. tostring(existing) .. " | API " .. tostring(stat.pending or 0) .. " (~" .. tostring(stat.apiChars or 0) .. " chars)" .. largeWarning) or " | Scan stats unavailable"
             local matchesText = filter == "" or string.find(string.lower(name .. " " .. id), filter, 1, true)
-            local matchesMode = filterMode == 1 or (filterMode == 2 and stat and stat.pending > 0) or (filterMode == 3 and stat and existing > 0)
+            local matchesMode = filterMode == 1 or (filterMode == 2 and stat and stat.pending > 0) or (filterMode == 3 and stat and existing > 0) or (filterMode == 4 and stat and stat.large == 1) or (filterMode == 5 and selected)
             if matchesText and matchesMode then table.insert(entries, { id = id, name = name, selected = selected, statistics = statistics, stat = stat, loadOrder = i }) end
         end
     end
@@ -81,12 +89,14 @@ function Selector:refresh()
         return a.id < b.id
     end)
     for _, entry in ipairs(entries) do self.list:addItem((entry.selected and "[x] " or "[ ] ") .. entry.name .. "  <" .. entry.id .. ">" .. entry.statistics, entry) end
+    self:updateSelectionTitle()
 end
-function Selector:selectAll() for _, item in ipairs(self.list.items) do item.item.selected = true; self.selectedById[item.item.id] = true; item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end
-function Selector:selectNone() for _, item in ipairs(self.list.items) do item.item.selected = false; self.selectedById[item.item.id] = false; item.text = "[ ] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end
+function Selector:selectAll() for _, item in ipairs(self.list.items) do if not (item.item.stat and item.item.stat.large == 1) then item.item.selected = true; self.selectedById[item.item.id] = true; item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end self:updateSelectionTitle() end
+function Selector:selectLarge() for _, item in ipairs(self.list.items) do if item.item.stat and item.item.stat.large == 1 then item.item.selected = true; self.selectedById[item.item.id] = true; item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end self:updateSelectionTitle() end
+function Selector:selectNone() for _, item in ipairs(self.list.items) do item.item.selected = false; self.selectedById[item.item.id] = false; item.text = "[ ] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end self:updateSelectionTitle() end
 function Selector:save()
     local out = {}; for id, selected in pairs(self.selectedById) do if selected then table.insert(out, id) end end
-    PZAITranslator.saveTargetSelection(out); self.title.name = "Translation targets - saved " .. tostring(#out)
+    PZAITranslator.saveTargetSelection(out); self:updateSelectionTitle()
 end
 function Selector:close() self:save(); self:setVisible(false); self:removeFromUIManager(); PZAITranslator.selector = nil end
 function Selector:new(x, y, w, h)

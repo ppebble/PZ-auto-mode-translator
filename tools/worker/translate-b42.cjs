@@ -3,7 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { requestBatches } = require('./provider-profiles.cjs');
+const { requestBatches, configuredCost } = require('./provider-profiles.cjs');
 
 function arg(name, fallback) { const i = process.argv.indexOf(name); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback; }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
@@ -25,7 +25,7 @@ function updateTranslationMemory(file, targetLanguage, records) {
 }
 function writeStatus(file, values) {
   if (!file) return;
-  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod', 'waitSeconds', 'estimatedWaitSeconds', 'errorCode'];
+  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod', 'waitSeconds', 'estimatedWaitSeconds', 'errorCode', 'apiCharacters', 'requestCount', 'estimatedInputTokens', 'estimatedOutputTokens', 'estimatedCostUsd'];
   const lines = ordered.filter(key => values[key] !== undefined && values[key] !== null)
     .map(key => key + '=' + String(values[key]).replace(/[\r\n]/g, ' '));
   lines.push('updatedAt=' + new Date().toISOString());
@@ -39,6 +39,20 @@ const languageMap = {
   RU: { name: 'Russian', providerCode: 'RU', yandexCode: 'ru' }, TR: { name: 'Turkish', providerCode: 'TR', yandexCode: 'tr' }
 };
 function targetLanguageInfo(code) { const info = languageMap[code]; if (!info) throw new Error('Unsupported Project Zomboid target language code: ' + code); return info; }
+function compactBatch(batch) { return batch.map((record, index) => ({ i: String(index), t: record.source, k: record.category + '/' + record.key })); }
+function expandCompactMap(value, batch) {
+  const compact = value && (value.translations || value); const result = {};
+  const save = (index, translated) => {
+    const text = typeof translated === 'string' ? translated : translated && (translated.text || translated.translation || translated.target || translated.t);
+    if (Number.isInteger(Number(index)) && Number(index) >= 0 && Number(index) < batch.length && typeof text === 'string') result[batch[Number(index)].id] = text;
+  };
+  if (Array.isArray(compact)) {
+    for (const entry of compact) if (entry && typeof entry === 'object') save(entry.i ?? entry.id ?? entry.index, entry);
+  } else if (compact && typeof compact === 'object') {
+    for (const [index, translated] of Object.entries(compact)) save(index, translated);
+  }
+  return result;
+}
 function tokens(value) { return (value.match(/%\d+|\{\d+\}|<[^>]+>|\\n/g) || []).sort(); }
 function validate(source, target) {
   if (tokens(source).join('\u0000') !== tokens(target).join('\u0000')) return 'placeholder mismatch';
@@ -62,6 +76,11 @@ function applyRules(source, record, rules) {
 }
 function dryTranslate(source, rules) { return '[DRY-RUN ' + rules.targetLanguage + '] ' + source; }
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function pauseRequested(file) { return Boolean(file && fs.existsSync(file)); }
+async function waitWithPause(ms, pauseFile, onPause) {
+  let remaining = ms;
+  while (remaining > 0) { if (pauseRequested(pauseFile)) { onPause(); throw new Error('Translation paused by user. Completed batches were saved.'); } const step = Math.min(1000, remaining); await sleep(step); remaining -= step; }
+}
 function pacingSettings(provider) {
   // A background game session can tolerate a conservative pace. Keeping every
   // request over one minute apart avoids common per-minute account limits.
@@ -73,15 +92,16 @@ function estimatedWaitSeconds(batches, pacing) {
   for (let index = 1; index < batches.length; index++) ms += Math.max(pacing.intervalMs, batches[index - 1][0].modId !== batches[index][0].modId ? pacing.modPauseMs : 0);
   return Math.ceil(ms / 1000);
 }
-function createPacer(pacing, progress, plannedWaitSeconds) {
+function createPacer(pacing, progress, plannedWaitSeconds, pauseFile) {
   let lastRequestAt = 0; let lastMod = null;
   return async batch => {
+    if (pauseRequested(pauseFile)) { progress(null, batch[0].modId, { phase: 'paused', message: 'Paused before the next provider request.' }); throw new Error('Translation paused by user. Completed batches were saved.'); }
     if (lastRequestAt > 0) {
       const minimum = lastMod !== batch[0].modId ? Math.max(pacing.intervalMs, pacing.modPauseMs) : pacing.intervalMs;
       const waitMs = Math.max(0, lastRequestAt + minimum - Date.now());
       if (waitMs > 0) {
         progress(null, batch[0].modId, { phase: 'waiting', waitSeconds: Math.ceil(waitMs / 1000), estimatedWaitSeconds: plannedWaitSeconds, message: `Rate-limit pacing: waiting ${Math.ceil(waitMs / 1000)}s before the next batch.` });
-        await sleep(waitMs);
+        await waitWithPause(waitMs, pauseFile, () => progress(null, batch[0].modId, { phase: 'paused', message: 'Paused while waiting. Completed batches were saved.' }));
       }
     }
     lastRequestAt = Date.now(); lastMod = batch[0].modId;
@@ -106,16 +126,16 @@ async function fetchWithBackoff(label, request, config, onRetry) {
     await sleep(delay);
   }
 }
-async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
+async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch, pauseFile) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const baseUrl = config.provider === 'deepseek' ? 'https://api.deepseek.com' : (config.baseUrl || 'https://api.openai.com/v1');
   const endpoint = baseUrl.replace(/\/$/, '') + '/chat/completions';
-  const result = {}; const pace = createPacer(pacingSettings('openai'), progress, plannedWaitSeconds); let processed = 0;
+  const result = {}; const pace = createPacer(pacingSettings('openai'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch); if (progress) progress(processed, batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
     const payload = { model: config.model, temperature: 0, response_format: { type: 'json_object' }, messages: [
-      { role: 'system', content: 'Translate from English to ' + target.name + '. Return JSON object mapping each id to translated text. Preserve every placeholder exactly.' },
-      { role: 'user', content: JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }
+      { role: 'system', content: 'Translate English to ' + target.name + '. Return JSON mapping each i to text. Preserve placeholders exactly.' },
+      { role: 'user', content: JSON.stringify(compactBatch(batch)) }
     ] };
     if (config.provider === 'deepseek') payload.thinking = { type: 'disabled' };
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.apiKey }, body: JSON.stringify(payload), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
@@ -123,35 +143,35 @@ async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds
     if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
     const body = await response.json(); const content = body.choices && body.choices[0] && body.choices[0].message && body.choices[0].message.content;
     if (!content) throw new Error('Provider response missing choices[0].message');
-    const parsedBody = JSON.parse(content); Object.assign(result, parsedBody.translations || parsedBody); processed += batch.length; if (onBatch) onBatch(result);
+    const parsedBody = JSON.parse(content); Object.assign(result, expandCompactMap(parsedBody, batch)); processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
-async function claudeTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
+async function claudeTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch, pauseFile) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const endpoint = 'https://api.anthropic.com/v1/messages';
-  const result = {}; const pace = createPacer(pacingSettings('claude'), progress, plannedWaitSeconds); let processed = 0;
+  const result = {}; const pace = createPacer(pacingSettings('claude'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
     if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
     const body = {
       model: config.model || 'claude-haiku-4-5', max_tokens: 16384,
-      system: 'Translate from English to ' + target.name + '. Return only a valid JSON object mapping each id to its translated text. Preserve every placeholder exactly.',
-      messages: [{ role: 'user', content: JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }]
+      system: 'Translate English to ' + target.name + '. Return only JSON mapping each i to text. Preserve placeholders exactly.',
+      messages: [{ role: 'user', content: JSON.stringify(compactBatch(batch)) }]
     };
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
     const response = await fetchWithBackoff('Claude batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Claude HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json(); const content = (payload.content || []).filter(part => part.type === 'text').map(part => part.text || '').join('');
     if (!content) throw new Error('Claude response missing text content');
-    const parsed = JSON.parse(content); Object.assign(result, parsed.translations || parsed);
+    const parsed = JSON.parse(content); Object.assign(result, expandCompactMap(parsed, batch));
     processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
-async function deepLTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
+async function deepLTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch, pauseFile) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const apiBase = (config.baseUrl || 'https://api-free.deepl.com/v2').replace(/\/$/, '');
   const usageResponse = await fetch(apiBase + '/usage', { headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey }, signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
@@ -166,7 +186,7 @@ async function deepLTranslate(batches, config, rules, progress, plannedWaitSecon
   const result = {};
   // DeepL accepts multiple text values per request. Conservative chunks keep
   // requests below provider payload limits while preserving per-key mapping.
-  const pace = createPacer(pacingSettings('deepl'), progress, plannedWaitSeconds); let processed = 0;
+  const pace = createPacer(pacingSettings('deepl'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
     if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
@@ -183,35 +203,34 @@ async function deepLTranslate(batches, config, rules, progress, plannedWaitSecon
   }
   return result;
 }
-async function geminiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
+async function geminiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch, pauseFile) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const model = config.model || 'gemini-2.5-flash-lite';
   const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(config.apiKey);
   const result = {};
   // Requests are deliberately spaced rather than burst, regardless of the
   // selected Gemini model or account tier.
-  const pace = createPacer(pacingSettings('gemini'), progress, plannedWaitSeconds); let processed = 0;
+  const pace = createPacer(pacingSettings('gemini'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
     if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
-    const prompt = 'Translate each English value to ' + target.name + '. Return only a JSON object mapping each id to its translated string. Preserve every placeholder exactly. Input: ' + JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key })));
+    const prompt = 'Translate English to ' + target.name + '. Return only JSON mapping each i to text. Preserve placeholders exactly. Input: ' + JSON.stringify(compactBatch(batch));
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
     const response = await fetchWithBackoff('Gemini batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0] && batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Gemini HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     const content = payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts && payload.candidates[0].content.parts.map(x => x.text || '').join('');
     if (!content) throw new Error('Gemini response missing candidates[0].content.parts.text');
-    const parsed = JSON.parse(content); const translations = parsed.translations || parsed;
-    for (const record of batch) result[record.id] = translations[record.id];
+    const parsed = JSON.parse(content); Object.assign(result, expandCompactMap(parsed, batch));
     processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
-async function yandexTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
+async function yandexTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch, pauseFile) {
   const target = targetLanguageInfo(rules.targetLanguage);
   const endpoint = 'https://translate.api.cloud.yandex.net/translate/v2/translate';
-  const result = {}; const pace = createPacer(pacingSettings('yandex'), progress, plannedWaitSeconds); let processed = 0;
+  const result = {}; const pace = createPacer(pacingSettings('yandex'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
     if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
@@ -236,6 +255,7 @@ async function main() {
   const rulesPath = arg('--rules', 'config/rules.example.json');
   const providerPath = arg('--provider', 'config/provider.local.json');
   const statusFile = arg('--status-file', '');
+  const pauseFile = arg('--pause-file', '');
   const dryRun = process.argv.includes('--dry-run');
   const manifest = readJson(manifestPath); const rules = { ...readJson(rulesPath), targetLanguage: manifest.targetLanguage };
   const config = fs.existsSync(providerPath) && fs.statSync(providerPath).size > 0 ? readJson(providerPath) : {};
@@ -255,6 +275,7 @@ async function main() {
   const providerName = ['deepl', 'gemini', 'yandex', 'claude', 'deepseek', 'openai-compatible'].includes(config.provider) ? config.provider : 'openai';
   const providerBatches = requestBatches(providerRecords, providerName);
   const plannedWaitSeconds = estimatedWaitSeconds(providerBatches, pacingSettings(providerName));
+  const usage = configuredCost(providerRecords, providerName, config.costEstimate || {});
   const baseCompleted = reusable.length + direct.filter(r => r.status === 'validated').length;
   const baseFailed = unresolved.length;
   const total = reusable.length + pending.length;
@@ -263,10 +284,10 @@ async function main() {
     if (details.retry) retries++;
     writeStatus(statusFile, {
       state: 'running', phase: details.phase || 'translating', message: details.message || (details.retry ? `Retrying after HTTP ${details.status} (${details.attempt}/5).` : 'Translating selected mod text.'),
-      total, completed: baseCompleted + (processed || 0), reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || '', waitSeconds: details.waitSeconds || 0, estimatedWaitSeconds: details.estimatedWaitSeconds || plannedWaitSeconds
+      total, completed: baseCompleted + (processed || 0), reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || '', waitSeconds: details.waitSeconds || 0, estimatedWaitSeconds: details.estimatedWaitSeconds || plannedWaitSeconds, apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6)
     });
   };
-  updateProgress(0, providerRecords[0] && providerRecords[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+  updateProgress(0, providerRecords[0] && providerRecords[0].modId, { phase: 'estimating', message: `Plan: ${usage.sourceChars} API characters, ${usage.requestCount} request(s), about ${usage.inputTokens} input tokens${usage.estimatedCostUsd === null ? '; cost estimate unavailable until account rates are configured.' : `, about $${usage.estimatedCostUsd.toFixed(4)}`}.`, estimatedWaitSeconds: plannedWaitSeconds });
   const buildResult = map => {
     const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
       const target = map[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target);
@@ -279,16 +300,18 @@ async function main() {
   const checkpoint = map => updateTranslationMemory(translationMemoryPath, manifest.targetLanguage, buildResult(map).records);
   if (providerRecords.length && (dryRun || config.apiKey)) {
     if (dryRun) for (const record of providerRecords) providerMap[record.id] = dryTranslate(record.source, rules);
-    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
-    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
-    else if (config.provider === 'yandex') providerMap = await yandexTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
-    else if (config.provider === 'claude') providerMap = await claudeTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
-    else providerMap = await apiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
+    else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint, pauseFile);
+    else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint, pauseFile);
+    else if (config.provider === 'yandex') providerMap = await yandexTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint, pauseFile);
+    else if (config.provider === 'claude') providerMap = await claudeTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint, pauseFile);
+    else providerMap = await apiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint, pauseFile);
   } else if (providerRecords.length) throw new Error('No provider API key. Use --dry-run or configure provider.local.json.');
+  const missingProviderResults = providerRecords.filter(record => typeof providerMap[record.id] !== 'string');
+  if (missingProviderResults.length) throw new Error('Provider returned incomplete results: ' + missingProviderResults.length + ' of ' + providerRecords.length + ' records are missing. Completed batches were saved; resume after checking the provider/model.');
   const result = buildResult(providerMap);
   checkpoint(providerMap);
   writeJson(output, result);
-  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: result.summary.reused, failed: result.summary.needsReview, retries, currentMod: '' });
+  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: result.summary.reused, failed: result.summary.needsReview, retries, currentMod: '', apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6) });
   console.log(JSON.stringify({ output, summary: result.summary }, null, 2));
 }
 main().catch(error => { console.error(error.stack || error); process.exit(1); });

@@ -62,6 +62,23 @@ Existing target-language strings are always preserved and excluded from API requ
 
 `-Install` replaces only `$env:USERPROFILE\Zomboid\mods\PZAITranslationGenerated`. Enable that generated mod, return to the main menu, then enter the world again to reload translations.
 
+### Localization limitation: hard-coded Lua text
+
+The generated overlay translates localization resources that a mod exposes in
+`Translate/EN` JSON (and supported Build 42 craft-recipe names). It does not
+modify Workshop/source mods. A mod can bypass those resources by displaying a
+literal string from Lua, in which case that specific text cannot be translated
+by this tool's JSON overlay.
+
+For example, **SaucedCarts** supplies the `Shopping Cart` item-name key and
+the generated overlay translates it to Korean, but its cart UI also reads the
+hard-coded Lua value `name = "Shopping Cart"`. Tooltips and normal translation
+keys can therefore be Korean while that particular displayed name remains
+English. This is a source-mod compatibility limitation, not a failed API job;
+re-running translation will not change hard-coded text. A separate
+compatibility patch would be required, while still leaving the Workshop source
+mod untouched.
+
 ## In-game flow
 
 1. Start the separate Helper with `START-TranslationHelper.vbs` from the extracted release ZIP.

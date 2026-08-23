@@ -5,6 +5,7 @@ PZAITranslator.state = "idle"
 PZAITranslator.storageFile = "PZAITranslator_provider.ini"
 PZAITranslator.jobFile = "PZAITranslator_job.ini"
 PZAITranslator.statusFile = "PZAITranslator_status.ini"
+PZAITranslator.pauseFile = "PZAITranslator_pause.ini"
 PZAITranslator.selectionFile = "PZAITranslator_selection.ini"
 PZAITranslator.catalogFile = "PZAITranslator_catalog.ini"
 
@@ -81,6 +82,15 @@ function PZAITranslator.writeStatus(state, message, details)
     return true
 end
 
+function PZAITranslator.requestPause()
+    local writer = getFileWriter(PZAITranslator.pauseFile, true, false)
+    if not writer then return false end
+    writer:write("paused=1\n")
+    writer:close()
+    PZAITranslator.writeStatus("paused", "Pause requested. The current provider request may finish; no later batch will be sent.", { phase = "paused" })
+    return true
+end
+
 function PZAITranslator.requestTranslation(action)
     local writer = getFileWriter(PZAITranslator.jobFile, true, false)
     if not writer then return false end
@@ -132,11 +142,11 @@ function PZAITranslator.loadTargetCatalog()
             local key = string.sub(line, 1, separator - 1)
             local value = string.sub(line, separator + 1)
             if key == "mod" then
-                current = { modId = value, candidates = 0, existing = 0, existing_overlay = 0, existing_generated = 0, pending = 0, sourceChars = 0, apiChars = 0, updatedAt = 0, steamUpdatedAt = 0, metadataSource = "" }
+                current = { modId = value, candidates = 0, existing = 0, existing_overlay = 0, existing_generated = 0, pending = 0, sourceChars = 0, apiChars = 0, updatedAt = 0, steamUpdatedAt = 0, metadataSource = "", large = 0 }
                 catalog[value] = current
             elseif key == "targetLanguage" then
                 targetLanguage = value
-            elseif current ~= nil and (key == "candidates" or key == "existing" or key == "existing_overlay" or key == "existing_generated" or key == "pending" or key == "sourceChars" or key == "apiChars" or key == "updatedAt" or key == "steamUpdatedAt") then
+            elseif current ~= nil and (key == "candidates" or key == "existing" or key == "existing_overlay" or key == "existing_generated" or key == "pending" or key == "sourceChars" or key == "apiChars" or key == "large" or key == "updatedAt" or key == "steamUpdatedAt") then
                 current[key] = tonumber(value) or 0
             elseif current ~= nil and key == "metadataSource" then
                 current.metadataSource = value

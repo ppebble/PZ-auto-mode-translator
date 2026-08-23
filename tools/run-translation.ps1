@@ -8,6 +8,7 @@ param(
     [string]$IncludeMods = '',
     [switch]$SkipModsWithTarget,
     [string]$StatusFile = '',
+    [string]$PauseFile = '',
     [switch]$DryRun,
     [switch]$Install
 )
@@ -51,6 +52,7 @@ $total = [int]$manifest.summary.pending + [int]$manifest.summary.reused
 $reused = [int]$manifest.summary.reused
 $translationArgs = @((Join-Path $root 'tools\worker\translate-b42.cjs'), '--manifest', $scan, '--rules', $Rules, '--provider', $Provider, '--output', $translated, '--translation-memory', $translationMemory)
 if (-not [string]::IsNullOrWhiteSpace($StatusFile)) { $translationArgs += @('--status-file', $StatusFile) }
+if (-not [string]::IsNullOrWhiteSpace($PauseFile)) { $translationArgs += @('--pause-file', $PauseFile) }
 if ($DryRun) { $translationArgs += '--dry-run' }
 Set-Stage '2/4 Translating missing strings with the selected provider.' @{ phase = 'translating'; total = $total; completed = $reused; reused = $reused; failed = 0; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $translationArgs

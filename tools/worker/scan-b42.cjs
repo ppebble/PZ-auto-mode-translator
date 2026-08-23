@@ -2,6 +2,7 @@
 'use strict';
 
 const fs = require('node:fs');
+const LARGE_MOD_API_CHARS = 20000;
 const path = require('node:path');
 const crypto = require('node:crypto');
 
@@ -212,7 +213,7 @@ function writeCatalog(file, result) {
   ];
   for (const stat of result.modSummary) {
     lines.push('mod=' + stat.modId);
-    for (const key of ['candidates', 'existing', 'existing_overlay', 'existing_generated', 'pending', 'sourceChars', 'apiChars', 'updatedAt', 'steamUpdatedAt', 'metadataSource']) {
+    for (const key of ['candidates', 'existing', 'existing_overlay', 'existing_generated', 'pending', 'sourceChars', 'apiChars', 'large', 'updatedAt', 'steamUpdatedAt', 'metadataSource']) {
       lines.push(key + '=' + (stat[key] || 0));
     }
   }
@@ -328,11 +329,12 @@ function main() {
   const perMod = new Map();
   const eligibleMods = mods.filter(mod => mod.dir && !excluded.has(mod.id) && (included.size === 0 || included.has(mod.id)));
   for (const mod of eligibleMods) {
-    perMod.set(mod.id, { modId: mod.id, candidates: 0, existing: 0, existing_overlay: 0, existing_generated: 0, reused: 0, pending: 0, craftRecipes: 0, sourceChars: 0, apiChars: 0, updatedAt: mod.updatedAt, steamUpdatedAt: mod.steamUpdatedAt, metadataSource: mod.metadataSource });
+    perMod.set(mod.id, { modId: mod.id, candidates: 0, existing: 0, existing_overlay: 0, existing_generated: 0, reused: 0, pending: 0, craftRecipes: 0, sourceChars: 0, apiChars: 0, updatedAt: mod.updatedAt, steamUpdatedAt: mod.steamUpdatedAt, metadataSource: mod.metadataSource, large: 0 });
   }
   for (const record of finalRecords) {
     const stat = perMod.get(record.modId); stat.candidates++; stat[record.status]++; stat.sourceChars += Array.from(record.source).length; if (record.status === 'pending') stat.apiChars += Array.from(record.source).length; if (record.sourceKind === 'craftRecipe') stat.craftRecipes++;
   }
+  for (const stat of perMod.values()) stat.large = stat.apiChars >= LARGE_MOD_API_CHARS ? 1 : 0;
   const result = { schema: 'pzat-scan-v1', generatedAt: new Date().toISOString(), targetLanguage, gameVersion, excluded: [...excluded], included: [...included], skipModsWithTarget, translationMemory: { path: translationMemoryPath, reused: summary.reused }, summary, modSummary: [...perMod.values()].sort((a, b) => a.modId.localeCompare(b.modId)), errors, records: finalRecords };
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(result, null, 2), 'utf8');
