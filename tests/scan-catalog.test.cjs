@@ -86,6 +86,16 @@ try {
   assert.equal(JSON.parse(fs.readFileSync(output, 'utf8')).summary.pending, 0);
   assert.match(fs.readFileSync(catalog, 'utf8'), /mod=ExternalOverlay/);
 
+  const badMemory = path.join(root, 'bad-memory.json');
+  const pendingId = `MainMod|UI|pending|${hash('Needs API')}`;
+  fs.writeFileSync(badMemory, JSON.stringify({ schema: 'pzat-translation-v1', targetLanguage: 'KO', records: [{ id: pendingId, status: 'validated', target: 'Needs API' }] }), 'utf8');
+  const generatedUi = path.join(home, 'mods', 'PZAITranslationGenerated', 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'UI.json');
+  fs.writeFileSync(generatedUi, JSON.stringify({ generated: 'Generated Korean', pending: 'Needs API' }), 'utf8');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', badMemory, '--include-mods', 'MainMod', '--no-catalog'], { stdio: 'pipe' });
+  const untranslated = JSON.parse(fs.readFileSync(output, 'utf8')).records.find(record => record.key === 'pending');
+  assert.equal(untranslated.status, 'pending');
+  assert.equal(untranslated.target, null);
+
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory, '--include-mods', 'MainMod', '--skip-mods-with-target'], { stdio: 'pipe' });
   const skipped = JSON.parse(fs.readFileSync(output, 'utf8'));
   assert.equal(skipped.summary.skippedModsWithTarget, 1);

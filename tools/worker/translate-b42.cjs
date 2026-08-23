@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { requestBatches, configuredCost } = require('./provider-profiles.cjs');
+const { unchangedNeedsTranslation } = require('./translation-quality.cjs');
 
 function arg(name, fallback) { const i = process.argv.indexOf(name); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback; }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
@@ -20,7 +21,10 @@ function validatedMemory(file, targetLanguage) {
 function updateTranslationMemory(file, targetLanguage, records) {
   if (!file) return;
   const memory = validatedMemory(file, targetLanguage);
-  for (const record of records) if (record.status === 'validated' && typeof record.target === 'string' && record.target.trim() !== '') memory.set(record.id, { id: record.id, status: 'validated', target: record.target });
+  for (const record of records) {
+    if (record.status === 'validated' && typeof record.target === 'string' && record.target.trim() !== '') memory.set(record.id, { id: record.id, status: 'validated', target: record.target });
+    else if (record.id) memory.delete(record.id);
+  }
   writeJson(file, { schema: 'pzat-translation-v1', generatedAt: new Date().toISOString(), targetLanguage, records: [...memory.values()] });
 }
 function writeStatus(file, values) {
@@ -54,10 +58,11 @@ function expandCompactMap(value, batch) {
   return result;
 }
 function tokens(value) { return (value.match(/%\d+|\{\d+\}|<[^>]+>|\\n/g) || []).sort(); }
-function validate(source, target) {
+function validate(source, target, record = {}) {
   if (tokens(source).join('\u0000') !== tokens(target).join('\u0000')) return 'placeholder mismatch';
   // Newlines are valid UI text; other control characters make the JSON pack unsafe.
   if (/\p{Cc}/u.test(target.replace(/[\n\r\t]/g, ''))) return 'control character';
+  if (unchangedNeedsTranslation({ ...record, source }, target)) return 'provider returned untranslated source text';
   return null;
 }
 function applyRules(source, record, rules) {
@@ -225,7 +230,7 @@ async function geminiTranslate(batches, config, rules, progress, plannedWaitSeco
   for (const batch of batches) {
     await pace(batch);
     if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
-    const prompt = 'Translate English to ' + target.name + '. Return only JSON mapping each i to text. Preserve placeholders exactly. Input: ' + JSON.stringify(compactBatch(batch));
+    const prompt = 'Translate every human-readable English phrase to ' + target.name + '. Preserve vehicle model names and other proper nouns, but translate surrounding recipe verbs, vehicle parts, storage labels, descriptions, and settings. Do not return a natural-language source unchanged. Return only JSON mapping each i to text and preserve placeholders exactly. Input: ' + JSON.stringify(compactBatch(batch));
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
     const response = await fetchWithBackoff('Gemini batch', request, config, (status, attempt, delay) => progress && progress(processed, batchProgressLabel(batch), { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Gemini HTTP ' + response.status + ': ' + await response.text());
@@ -277,7 +282,7 @@ async function main() {
     const blocked = (rules.doNotTranslate || []).some(term => record.source.includes(term));
     if (blocked) { unresolved.push({ ...record, status: 'needs_review', reason: 'do-not-translate' }); continue; }
     if (ruleResult.value !== record.source) {
-      const error = validate(record.source, ruleResult.value);
+      const error = validate(record.source, ruleResult.value, record);
       if (error) unresolved.push({ ...record, status: 'needs_review', reason: error });
       else direct.push({ ...record, target: ruleResult.value, status: 'validated', method: 'rule', appliedRules: ruleResult.applied });
     } else direct.push({ ...record, target: null, status: 'pending_provider', method: null, appliedRules: [] });
@@ -301,7 +306,7 @@ async function main() {
   updateProgress(0, providerRecords[0] && providerRecords[0].modId, { phase: 'estimating', message: `Plan: ${usage.sourceChars} API characters, ${usage.requestCount} request(s), about ${usage.inputTokens} input tokens${usage.estimatedCostUsd === null ? '; cost estimate unavailable until account rates are configured.' : `, about $${usage.estimatedCostUsd.toFixed(4)}`}.`, estimatedWaitSeconds: plannedWaitSeconds });
   const buildResult = map => {
     const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
-      const target = map[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target);
+      const target = map[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target, r);
       return { ...r, target: typeof target === 'string' ? target : null, status: error ? 'needs_review' : 'validated', method: 'provider', reason: error };
     }).map(r => ({ ...r, method: dryRun ? 'dry-run' : r.method })), ...unresolved];
     const reused = reusable.map(r => ({ ...r, status: 'validated', method: 'translation-memory' }));

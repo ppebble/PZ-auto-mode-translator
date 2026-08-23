@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const LARGE_MOD_API_CHARS = 20000;
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { reusableGeneratedTarget } = require('./translation-quality.cjs');
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -310,18 +311,20 @@ function main() {
         for (const [key, value] of Object.entries(source.value)) {
           if (!isTranslatable(value)) continue;
           const id = `${mod.id}|${category}|${key}|${sha256(value)}`;
-          const reusedTarget = memory.get(id);
+          const qualityRecord = { category, key, source: value };
+          const reusedTarget = reusableGeneratedTarget(qualityRecord, memory.get(id));
           const overlay = overlays.get(category.toLowerCase() + '|' + key);
           const externalOverlay = overlay && overlay.modId !== mod.id && overlay.modId !== 'PZAITranslationGenerated';
           const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated';
-          const status = isTranslatable(target[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedOverlay) ? 'existing_generated' : 'pending'));
+          const generatedTarget = generatedOverlay ? reusableGeneratedTarget(qualityRecord, overlay.target) : null;
+          const status = isTranslatable(target[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedTarget) ? 'existing_generated' : 'pending'));
           summary[status]++;
           // Version-specific B42 files intentionally replace common files for the same key.
           records.set(`${mod.id}|${category.toLowerCase()}|${key}`, {
             id,
             modId: mod.id, modPath: mod.dir, category, sourceFile,
             layout: rootInfo.layout, layoutVersion: rootInfo.version,
-            key, source: value, target: isTranslatable(target[key]) ? target[key] : (reusedTarget || (generatedOverlay ? overlay.target : (externalOverlay ? overlay.target : null))),
+            key, source: value, target: isTranslatable(target[key]) ? target[key] : (reusedTarget || generatedTarget || (externalOverlay ? overlay.target : null)),
             targetLanguage, sourceHash: sha256(value), status,
           });
         }
@@ -347,16 +350,18 @@ function main() {
         for (const [key, value] of Object.entries(source.value)) {
           if (!isTranslatable(value)) continue;
           const id = `${mod.id}|${category}|${key}|${sha256(value)}`;
-          const reusedTarget = memory.get(id);
+          const qualityRecord = { category, key, source: value };
+          const reusedTarget = reusableGeneratedTarget(qualityRecord, memory.get(id));
           const overlay = overlays.get(category.toLowerCase() + '|' + key);
           const externalOverlay = overlay && overlay.modId !== mod.id && overlay.modId !== 'PZAITranslationGenerated';
           const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated';
-          const status = isTranslatable(target.value[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedOverlay) ? 'existing_generated' : 'pending'));
+          const generatedTarget = generatedOverlay ? reusableGeneratedTarget(qualityRecord, overlay.target) : null;
+          const status = isTranslatable(target.value[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedTarget) ? 'existing_generated' : 'pending'));
           summary[status]++;
           records.set(`${mod.id}|${category.toLowerCase()}|${key}`, {
             id, modId: mod.id, modPath: mod.dir, category, sourceFile,
             layout: rootInfo.layout, layoutVersion: rootInfo.version,
-            key, source: value, target: isTranslatable(target.value[key]) ? target.value[key] : (reusedTarget || (generatedOverlay ? overlay.target : (externalOverlay ? overlay.target : null))),
+            key, source: value, target: isTranslatable(target.value[key]) ? target.value[key] : (reusedTarget || generatedTarget || (externalOverlay ? overlay.target : null)),
             targetLanguage, sourceHash: sha256(value), status, sourceFormat: 'legacy-lua', legacyTable: source.tableName,
           });
         }

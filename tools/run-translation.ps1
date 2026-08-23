@@ -60,12 +60,14 @@ if (-not [string]::IsNullOrWhiteSpace($PauseFile)) { $translationArgs += @('--pa
 if ($DryRun) { $translationArgs += '--dry-run' }
 Set-Stage '2/4 Translating missing strings with the selected provider.' @{ phase = 'translating'; total = $total; completed = $reused; reused = $reused; failed = 0; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $translationArgs
+$translatedManifest = Get-Content -LiteralPath $translated -Raw -Encoding utf8 | ConvertFrom-Json
+$needsReview = [int]$translatedManifest.summary.needsReview
 $packArgs = @((Join-Path $root 'tools\worker\materialize-b42.cjs'), '--input', $translated, '--output', $pack)
 if ($DryRun) { $packArgs += '--allow-dry-run' }
-Set-Stage '3/4 Validating placeholders and generating the translation pack.' @{ phase = 'generating'; total = $total; completed = $total; reused = $reused; failed = 0; retries = 0; currentMod = '' }
+Set-Stage '3/4 Validating placeholders and generating the translation pack.' @{ phase = 'generating'; total = $total; completed = ($total - $needsReview); reused = $reused; failed = $needsReview; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $packArgs
 if ($Install) {
-    Set-Stage '4/4 Installing PZAITranslationGenerated.' @{ phase = 'installing'; total = $total; completed = $total; reused = $reused; failed = 0; retries = 0; currentMod = '' }
+    Set-Stage '4/4 Installing PZAITranslationGenerated.' @{ phase = 'installing'; total = $total; completed = ($total - $needsReview); reused = $reused; failed = $needsReview; retries = 0; currentMod = '' }
     $modsRoot = Join-Path $ZomboidHome 'mods'
     $destination = Join-Path $modsRoot 'PZAITranslationGenerated'
     New-Item -ItemType Directory -Force -Path $modsRoot | Out-Null

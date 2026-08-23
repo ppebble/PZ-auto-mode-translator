@@ -98,6 +98,8 @@ mod untouched.
 
 Completed batches are saved locally in the Helper's `runtime\translation-memory.json` after every successful provider batch. If a provider returns a quota or rate-limit error, change the provider/model in Mod Options, save it, and choose **Resume interrupted translation** with the same selected mods and target language. The next scan reuses validated checkpoints and sends only still-pending strings to the newly selected model.
 
+Generated or memory text that is identical to a human-readable English source is not considered translated. A later Resume scan returns those records to `pending` and sends only that reduced list again. Script identifiers whose source is the key itself and vehicle model-name identities are exempt, while vehicle parts, recipes, settings, and descriptions must actually change. Placeholder mismatches and untranslated provider responses remain visible in the failed count and are omitted from the generated pack.
+
 ## Provider models
 
 `gemini-2.5-flash-lite` is the default Gemini model. Claude uses the Messages API and defaults to `claude-haiku-4-5`; DeepSeek uses its OpenAI-compatible endpoint and defaults to `deepseek-v4-flash`. DeepL uses translation modes rather than chat-model IDs. Yandex Cloud Translate uses its v2 translation service rather than a selectable model ID. OpenAI-compatible providers require a model ID accepted by that provider.
