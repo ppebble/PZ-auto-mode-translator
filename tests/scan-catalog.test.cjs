@@ -28,6 +28,19 @@ function mod(id, translations) {
     fs.writeFileSync(path.join(dir, 'UI.json'), JSON.stringify(values), 'utf8');
   }
 }
+function legacyMod(id, translations) {
+  const base = path.join(home, 'mods', id, 'common');
+  const translate = path.join(base, 'media', 'lua', 'shared', 'Translate');
+  fs.mkdirSync(translate, { recursive: true });
+  fs.writeFileSync(path.join(base, 'mod.info'), `name=${id}\nid=${id}\n`, 'utf8');
+  for (const [language, values] of Object.entries(translations)) {
+    const category = 'IG_UI';
+    const rows = Object.entries(values).map(([key, value]) => `\t${key} = "${value}",`).join('\n');
+    const dir = path.join(translate, language);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${category}_${language}.txt`), `${category}_${language} = {\n${rows}\n}\n`, 'utf8');
+  }
+}
 
 try {
   fs.mkdirSync(path.join(home, 'mods'), { recursive: true });
@@ -67,13 +80,29 @@ try {
   ]);
   const resume = JSON.parse(fs.readFileSync(resumeMemory, 'utf8'));
   assert.equal(resume.records.some(record => record.id.endsWith(hash('Needs API')) && record.target === '[DRY-RUN KO] Needs API'), true);
-  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', resumeMemory, '--include-mods', 'MainMod'], { stdio: 'pipe' });
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', resumeMemory, '--include-mods', 'MainMod', '--no-catalog'], { stdio: 'pipe' });
   assert.equal(JSON.parse(fs.readFileSync(output, 'utf8')).summary.pending, 0);
+  assert.match(fs.readFileSync(catalog, 'utf8'), /mod=ExternalOverlay/);
 
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory, '--include-mods', 'MainMod', '--skip-mods-with-target'], { stdio: 'pipe' });
   const skipped = JSON.parse(fs.readFileSync(output, 'utf8'));
   assert.equal(skipped.summary.skippedModsWithTarget, 1);
   assert.deepEqual(skipped.records, []);
+
+  legacyMod('LegacyVehicle', {
+    EN: { IGUI_VehicleNameLegacy: '89 LAND ROVER Defender', IGUI_VehiclePartLegacySeat: 'Seat' },
+    KO: { IGUI_VehiclePartLegacySeat: '좌석' },
+  });
+  fs.writeFileSync(path.join(home, 'mods', 'default.txt'), 'mod=LegacyVehicle\n', 'utf8');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory], { stdio: 'pipe' });
+  const legacy = JSON.parse(fs.readFileSync(output, 'utf8'));
+  assert.deepEqual(legacy.modSummary[0] && { candidates: legacy.modSummary[0].candidates, existing: legacy.modSummary[0].existing, pending: legacy.modSummary[0].pending }, { candidates: 2, existing: 1, pending: 1 });
+  const legacyRecord = legacy.records.find(record => record.key === 'IGUI_VehicleNameLegacy');
+  assert.equal(legacyRecord.sourceFormat, 'legacy-lua');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--dry-run'], { stdio: 'pipe' });
+  const legacyPack = path.join(root, 'legacy-pack');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'materialize-b42.cjs'), '--input', translated, '--output', legacyPack, '--allow-dry-run'], { stdio: 'pipe' });
+  assert.match(fs.readFileSync(path.join(legacyPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'IG_UI_KO.txt'), 'utf8'), /IGUI_VehicleNameLegacy = "\[DRY-RUN KO\] 89 LAND ROVER Defender",/);
 
   const steamRoot = path.join(root, 'Steam', 'steamapps', 'workshop', 'content', '108600');
   const steamAcf = path.join(root, 'Steam', 'steamapps', 'workshop', 'appworkshop_108600.acf');

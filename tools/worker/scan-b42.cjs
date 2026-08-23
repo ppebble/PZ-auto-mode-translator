@@ -19,6 +19,7 @@ const steamWorkshopRoot = arg('--steam-workshop-root', path.join(process.env['Pr
 const steamAppWorkshop = arg('--steam-appworkshop', path.join(path.dirname(path.dirname(steamWorkshopRoot)), 'appworkshop_108600.acf'));
 const excluded = new Set((arg('--exclude', 'PZAITranslator') || '').split(',').map(x => x.trim()).filter(Boolean));
 const included = new Set((arg('--include-mods', '') || '').split(',').map(x => x.trim()).filter(Boolean));
+const noCatalog = process.argv.includes('--no-catalog');
 const skipModsWithTarget = process.argv.includes('--skip-mods-with-target');
 const translationMemoryPath = arg('--translation-memory', path.join(process.cwd(), 'runtime', 'translation-memory.json'));
 const defaultList = path.join(zomboidHome, 'mods', 'default.txt');
@@ -161,6 +162,27 @@ function parseObject(file) {
     catch (error) { return { text, value: null, error: String(error.message || firstError.message || error), normalized: false }; }
   }
 }
+function unescapeLuaString(value) {
+  return value.replace(/\\\\([\\\\"'nrt])/g, (_, escaped) => ({ n: '\n', r: '\r', t: '\t' }[escaped] || escaped));
+}
+function parseLegacyTranslation(file, language) {
+  const text = readText(file);
+  const suffix = new RegExp('_' + language.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+  const category = path.basename(file, '.txt').replace(suffix, '');
+  // File names and table names are not consistently paired in Workshop mods:
+  // `IG_UI_EN.txt` commonly contains `IGUI_EN`, and `Recipes_EN.txt` may use
+  // `RecipesEN`. The table name is what PZ loads, so retain it for output.
+  const header = text.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=?\s*\{/m);
+  if (!category || !header) return { value: null, category, error: 'expected Lua translation table' };
+  const value = {};
+  for (const match of text.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"((?:\\.|[^"\\])*)"\s*,?\s*(?:--.*)?$/gm)) value[match[1]] = unescapeLuaString(match[2]);
+  return { value, category, tableName: header[1], error: null };
+}
+function legacyTranslationFiles(dir, language) {
+  if (!fs.existsSync(dir)) return [];
+  const suffix = '_' + language.toLowerCase() + '.txt';
+  return fs.readdirSync(dir).filter(file => file.toLowerCase().endsWith(suffix));
+}
 function isTranslatable(value) {
   return typeof value === 'string' && value.trim() !== '';
 }
@@ -173,6 +195,9 @@ function hasTargetTranslation(modDir) {
       const parsed = parseObject(path.join(targetDir, file));
       return !parsed.error && parsed.value && !Array.isArray(parsed.value) && typeof parsed.value === 'object'
         && Object.values(parsed.value).some(isTranslatable);
+    }) || legacyTranslationFiles(targetDir, targetLanguage).some(file => {
+      const parsed = parseLegacyTranslation(path.join(targetDir, file), targetLanguage);
+      return !parsed.error && Object.values(parsed.value).some(isTranslatable);
     });
   });
 }
@@ -196,6 +221,12 @@ function effectiveTargetMap(mods) {
         const parsed = parseObject(path.join(dir, file));
         if (parsed.error || !parsed.value || Array.isArray(parsed.value)) continue;
         const category = path.basename(file, '.json').toLowerCase();
+        for (const [key, value] of Object.entries(parsed.value)) if (isTranslatable(value)) map.set(category + '|' + key, { target: value, modId: mod.id });
+      }
+      for (const file of legacyTranslationFiles(dir, targetLanguage)) {
+        const parsed = parseLegacyTranslation(path.join(dir, file), targetLanguage);
+        if (parsed.error || !parsed.value) continue;
+        const category = parsed.category.toLowerCase();
         for (const [key, value] of Object.entries(parsed.value)) if (isTranslatable(value)) map.set(category + '|' + key, { target: value, modId: mod.id });
       }
     }
@@ -290,6 +321,40 @@ function main() {
           });
         }
       }
+      for (const sourceFile of legacyTranslationFiles(enDir, 'EN')) {
+        const sourcePath = path.join(enDir, sourceFile);
+        const source = parseLegacyTranslation(sourcePath, 'EN');
+        const category = source.category;
+        summary.files++;
+        if (source.error || !source.value) {
+          summary.errors++;
+          errors.push({ modId: mod.id, category, file: sourcePath, error: source.error || 'invalid Lua translation table' });
+          continue;
+        }
+        const targetPath = path.join(translateRoot, targetLanguage, category + '_' + targetLanguage + '.txt');
+        const target = fs.existsSync(targetPath) ? parseLegacyTranslation(targetPath, targetLanguage) : { value: {} };
+        if (target.error || !target.value) {
+          summary.errors++;
+          errors.push({ modId: mod.id, category, file: targetPath, error: target.error || 'invalid target Lua translation table' });
+          continue;
+        }
+        for (const [key, value] of Object.entries(source.value)) {
+          if (!isTranslatable(value)) continue;
+          const id = `${mod.id}|${category}|${key}|${sha256(value)}`;
+          const reusedTarget = memory.get(id);
+          const overlay = overlays.get(category.toLowerCase() + '|' + key);
+          const externalOverlay = overlay && overlay.modId !== mod.id && overlay.modId !== 'PZAITranslationGenerated';
+          const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated';
+          const status = isTranslatable(target.value[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedOverlay) ? 'existing_generated' : 'pending'));
+          summary[status]++;
+          records.set(`${mod.id}|${category.toLowerCase()}|${key}`, {
+            id, modId: mod.id, modPath: mod.dir, category, sourceFile,
+            layout: rootInfo.layout, layoutVersion: rootInfo.version,
+            key, source: value, target: isTranslatable(target.value[key]) ? target.value[key] : (reusedTarget || (generatedOverlay ? overlay.target : (externalOverlay ? overlay.target : null))),
+            targetLanguage, sourceHash: sha256(value), status, sourceFormat: 'legacy-lua', legacyTable: source.tableName,
+          });
+        }
+      }
     }
     // B42 crafting recipes are authored in media/scripts rather than in
     // Translate/EN JSON.  Emit compatible Recipes.json entries for their
@@ -338,7 +403,7 @@ function main() {
   const result = { schema: 'pzat-scan-v1', generatedAt: new Date().toISOString(), targetLanguage, gameVersion, excluded: [...excluded], included: [...included], skipModsWithTarget, translationMemory: { path: translationMemoryPath, reused: summary.reused }, summary, modSummary: [...perMod.values()].sort((a, b) => a.modId.localeCompare(b.modId)), errors, records: finalRecords };
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(result, null, 2), 'utf8');
-  writeCatalog(catalog, result);
+  if (!noCatalog) writeCatalog(catalog, result);
   console.log(JSON.stringify({ output, catalog, summary, errors: errors.length }, null, 2));
 }
 main();

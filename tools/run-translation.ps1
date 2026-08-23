@@ -43,8 +43,12 @@ function Set-Stage([string]$Message, [hashtable]$Details = @{}) {
 }
 
 Set-Stage '1/4 Scanning active B42 mods.'
-$scanArgs = @((Join-Path $root 'tools\worker\scan-b42.cjs'), '--zomboid-home', $ZomboidHome, '--target-language', $TargetLanguage, '--exclude', $Exclude, '--output', $scan, '--translation-memory', $translationMemory)
-if ($SkipModsWithTarget) { $scanArgs += '--skip-mods-with-target' }
+$scanBaseArgs = @((Join-Path $root 'tools\worker\scan-b42.cjs'), '--zomboid-home', $ZomboidHome, '--target-language', $TargetLanguage, '--exclude', $Exclude, '--translation-memory', $translationMemory)
+if ($SkipModsWithTarget) { $scanBaseArgs += '--skip-mods-with-target' }
+# Always refresh the full selector catalog. A selected translation run must not
+# erase statistics for the remaining active mods.
+Invoke-Worker -WorkerArgs ($scanBaseArgs + @('--output', (Join-Path $runtime 'catalog-scan-manifest.json')))
+$scanArgs = $scanBaseArgs + @('--output', $scan, '--no-catalog')
 if (-not [string]::IsNullOrWhiteSpace($IncludeMods)) { $scanArgs += @('--include-mods', $IncludeMods) }
 Invoke-Worker -WorkerArgs $scanArgs
 $manifest = Get-Content -LiteralPath $scan -Raw -Encoding utf8 | ConvertFrom-Json

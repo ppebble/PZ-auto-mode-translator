@@ -65,10 +65,12 @@ Existing target-language strings are always preserved and excluded from API requ
 ### Localization limitation: hard-coded Lua text
 
 The generated overlay translates localization resources that a mod exposes in
-`Translate/EN` JSON (and supported Build 42 craft-recipe names). It does not
-modify Workshop/source mods. A mod can bypass those resources by displaying a
-literal string from Lua, in which case that specific text cannot be translated
-by this tool's JSON overlay.
+`Translate/EN` JSON, legacy Lua-table TXT resources such as `IG_UI_EN.txt` and
+`Recipes_EN.txt`, and supported Build 42 craft-recipe names. This includes the
+vehicle names, parts, and recipe labels authored by KI5-style vehicle mods. It
+does not modify Workshop/source mods. A mod can bypass those resources by
+displaying a literal string from Lua, in which case that specific text cannot
+be translated by this tool's overlay.
 
 For example, **SaucedCarts** supplies the `Shopping Cart` item-name key and
 the generated overlay translates it to Korean, but its cart UI also reads the
