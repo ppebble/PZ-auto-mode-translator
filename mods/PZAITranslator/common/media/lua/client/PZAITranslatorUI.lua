@@ -8,6 +8,39 @@ require "ISUI/ISComboBox"
 PZAITranslator = PZAITranslator or {}
 local Selector = ISPanel:derive("PZAITranslatorSelector")
 
+function Selector:drawTargetItem(y, item, alt)
+    if not item.height then item.height = self.itemheight end
+    if item.height <= 0 then return y + item.height end
+    local textColor = self.textColor
+    if item.selected then
+        self:drawSelection(0, y, self:getWidth(), item.height)
+        textColor = self.selectedTextColor
+    elseif self.mouseoverselected == item.index and self:isMouseOver() and not self:isMouseOverScrollBar() then
+        self:drawMouseOverHighlight(0, y, self:getWidth(), item.height - 1)
+    end
+    self:drawRectBorder(0, y, self:getWidth(), item.height, 0.5, self.borderColor.r, self.borderColor.g, self.borderColor.b)
+    local entry = item.item
+    local stat = entry.stat
+    local textY = y + (self.itemPadY or (item.height - self.fontHgt) / 2)
+    local candidatesRight, translatedRight = self:getWidth() - 285, self:getWidth() - 185
+    local apiRight, warningX = self:getWidth() - 75, self:getWidth() - 65
+    self:drawText(entry.selected and "[x]" or "[ ]", 8, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+    self:drawText(entry.name, 48, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+    if stat then
+        self:drawTextRight(tostring(stat.candidates or 0), candidatesRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+        self:drawTextRight(tostring(entry.existing or 0), translatedRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+        local apiColor = (stat.apiChars or 0) > 0 and { r = 1, g = 0.82, b = 0.28, a = 1 } or textColor
+        self:drawTextRight(tostring(stat.apiChars or 0), apiRight, textY, apiColor.r, apiColor.g, apiColor.b, apiColor.a, self.font)
+        if stat.large == 1 then self:drawText("LARGE", warningX, textY, 1, 0.45, 0.25, 1, self.font) end
+    else
+        self:drawTextRight("--", candidatesRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+        self:drawTextRight("--", translatedRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+        self:drawTextRight("--", apiRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+        self:drawText("No scan", warningX, textY, 0.75, 0.75, 0.75, 1, self.font)
+    end
+    return y + item.height
+end
+
 function Selector:initialise()
     ISPanel.initialise(self)
     self.title = ISLabel:new(12, 10, 20, "Translation targets", 1, 1, 1, 1, UIFont.Medium, true)
@@ -21,12 +54,16 @@ function Selector:initialise()
     self.sortChoice:initialise(); self.sortChoice:addOption("Load order"); self.sortChoice:addOption("Recently updated"); self.sortChoice:addOption("Recent Steam install/update"); self.sortChoice:addOption("Most API characters"); self.sortChoice:addOption("Most API candidates"); self.sortChoice.selected = 1; self:addChild(self.sortChoice)
     self.list = ISScrollingListBox:new(20, 76, self.width - 40, self.height - 142)
     self.list:initialise(); self.list.itemheight = math.max(34, getTextManager():getFontHeight(UIFont.Small) + 12); self.list.itemPadY = math.floor((self.list.itemheight - self.list.fontHgt) / 2) - 1
+    self.list.doDrawItem = self.drawTargetItem
+    self.list:addColumn("Select", 0); self.list:addColumn("Mod", 48)
+    self.list:addColumn("Candidates", self.list.width - 360); self.list:addColumn("Translated", self.list.width - 270)
+    self.list:addColumn("API chars", self.list.width - 165); self.list:addColumn("Warning", self.list.width - 65)
     self.list.onMouseDown = function(list, x, y)
         ISScrollingListBox.onMouseDown(list, x, y)
         local item = list.items[list.selected]
         if item then
             item.item.selected = not item.item.selected; self.selectedById[item.item.id] = item.item.selected
-            item.text = (item.item.selected and "[x] " or "[ ] ") .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+            item.text = item.item.name
             self:updateSelectionTitle()
         end
     end
@@ -67,11 +104,9 @@ function Selector:refresh()
             self.selectedById[id] = selected
             local stat = catalog[id]
             local existing = stat and ((stat.existing or 0) + (stat.existing_overlay or 0) + (stat.existing_generated or 0)) or 0
-            local largeWarning = stat and stat.large == 1 and " | LARGE: select separately" or ""
-            local statistics = stat and (" | Candidates " .. tostring(stat.candidates or 0) .. " | Existing " .. tostring(existing) .. " | API " .. tostring(stat.pending or 0) .. " (~" .. tostring(stat.apiChars or 0) .. " chars)" .. largeWarning) or " | Scan stats unavailable"
             local matchesText = filter == "" or string.find(string.lower(name .. " " .. id), filter, 1, true)
             local matchesMode = filterMode == 1 or (filterMode == 2 and stat and stat.pending > 0) or (filterMode == 3 and stat and existing > 0) or (filterMode == 4 and stat and stat.large == 1) or (filterMode == 5 and selected)
-            if matchesText and matchesMode then table.insert(entries, { id = id, name = name, selected = selected, statistics = statistics, stat = stat, loadOrder = i }) end
+            if matchesText and matchesMode then table.insert(entries, { id = id, name = name, selected = selected, existing = existing, stat = stat, loadOrder = i }) end
         end
     end
     table.sort(entries, function(a, b)
@@ -88,14 +123,14 @@ function Selector:refresh()
         end
         return a.id < b.id
     end)
-    for _, entry in ipairs(entries) do self.list:addItem((entry.selected and "[x] " or "[ ] ") .. entry.name .. "  <" .. entry.id .. ">" .. entry.statistics, entry) end
+    for _, entry in ipairs(entries) do self.list:addItem(entry.name, entry) end
     self:updateSelectionTitle()
 end
 function Selector:selectAll()
     for _, item in ipairs(self.list.items) do
         if not (item.item.stat and item.item.stat.large == 1) then
             item.item.selected = true; self.selectedById[item.item.id] = true
-            item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+            item.text = item.item.name
         end
     end
     self:updateSelectionTitle()
@@ -104,7 +139,7 @@ function Selector:selectLarge()
     for _, item in ipairs(self.list.items) do
         if item.item.stat and item.item.stat.large == 1 then
             item.item.selected = true; self.selectedById[item.item.id] = true
-            item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+            item.text = item.item.name
         end
     end
     self:updateSelectionTitle()
@@ -112,7 +147,7 @@ end
 function Selector:selectNone()
     for _, item in ipairs(self.list.items) do
         item.item.selected = false; self.selectedById[item.item.id] = false
-        item.text = "[ ] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+            item.text = item.item.name
     end
     self:updateSelectionTitle()
 end
