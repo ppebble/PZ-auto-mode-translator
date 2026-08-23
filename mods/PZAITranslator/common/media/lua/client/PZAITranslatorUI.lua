@@ -91,9 +91,31 @@ function Selector:refresh()
     for _, entry in ipairs(entries) do self.list:addItem((entry.selected and "[x] " or "[ ] ") .. entry.name .. "  <" .. entry.id .. ">" .. entry.statistics, entry) end
     self:updateSelectionTitle()
 end
-function Selector:selectAll() for _, item in ipairs(self.list.items) do if not (item.item.stat and item.item.stat.large == 1) then item.item.selected = true; self.selectedById[item.item.id] = true; item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end self:updateSelectionTitle() end
-function Selector:selectLarge() for _, item in ipairs(self.list.items) do if item.item.stat and item.item.stat.large == 1 then item.item.selected = true; self.selectedById[item.item.id] = true; item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end self:updateSelectionTitle() end
-function Selector:selectNone() for _, item in ipairs(self.list.items) do item.item.selected = false; self.selectedById[item.item.id] = false; item.text = "[ ] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics end end self:updateSelectionTitle() end
+function Selector:selectAll()
+    for _, item in ipairs(self.list.items) do
+        if not (item.item.stat and item.item.stat.large == 1) then
+            item.item.selected = true; self.selectedById[item.item.id] = true
+            item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+        end
+    end
+    self:updateSelectionTitle()
+end
+function Selector:selectLarge()
+    for _, item in ipairs(self.list.items) do
+        if item.item.stat and item.item.stat.large == 1 then
+            item.item.selected = true; self.selectedById[item.item.id] = true
+            item.text = "[x] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+        end
+    end
+    self:updateSelectionTitle()
+end
+function Selector:selectNone()
+    for _, item in ipairs(self.list.items) do
+        item.item.selected = false; self.selectedById[item.item.id] = false
+        item.text = "[ ] " .. item.item.name .. "  <" .. item.item.id .. ">" .. item.item.statistics
+    end
+    self:updateSelectionTitle()
+end
 function Selector:save()
     local out = {}; for id, selected in pairs(self.selectedById) do if selected then table.insert(out, id) end end
     PZAITranslator.saveTargetSelection(out); self:updateSelectionTitle()
