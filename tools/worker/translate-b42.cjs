@@ -108,7 +108,8 @@ async function fetchWithBackoff(label, request, config, onRetry) {
 }
 async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
   const target = targetLanguageInfo(rules.targetLanguage);
-  const endpoint = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '') + '/chat/completions';
+  const baseUrl = config.provider === 'deepseek' ? 'https://api.deepseek.com' : (config.baseUrl || 'https://api.openai.com/v1');
+  const endpoint = baseUrl.replace(/\/$/, '') + '/chat/completions';
   const result = {}; const pace = createPacer(pacingSettings('openai'), progress, plannedWaitSeconds); let processed = 0;
   for (const batch of batches) {
     await pace(batch); if (progress) progress(processed, batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
@@ -116,6 +117,7 @@ async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds
       { role: 'system', content: 'Translate from English to ' + target.name + '. Return JSON object mapping each id to translated text. Preserve every placeholder exactly.' },
       { role: 'user', content: JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }
     ] };
+    if (config.provider === 'deepseek') payload.thinking = { type: 'disabled' };
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.apiKey }, body: JSON.stringify(payload), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
     const response = await fetchWithBackoff('OpenAI batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
@@ -123,6 +125,29 @@ async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds
     if (!content) throw new Error('Provider response missing choices[0].message');
     const parsedBody = JSON.parse(content); Object.assign(result, parsedBody.translations || parsedBody); processed += batch.length; if (onBatch) onBatch(result);
     if (progress) progress(processed, batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+  }
+  return result;
+}
+async function claudeTranslate(batches, config, rules, progress, plannedWaitSeconds, onBatch) {
+  const target = targetLanguageInfo(rules.targetLanguage);
+  const endpoint = 'https://api.anthropic.com/v1/messages';
+  const result = {}; const pace = createPacer(pacingSettings('claude'), progress, plannedWaitSeconds); let processed = 0;
+  for (const batch of batches) {
+    await pace(batch);
+    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    const body = {
+      model: config.model || 'claude-haiku-4-5', max_tokens: 16384,
+      system: 'Translate from English to ' + target.name + '. Return only a valid JSON object mapping each id to its translated text. Preserve every placeholder exactly.',
+      messages: [{ role: 'user', content: JSON.stringify(batch.map(r => ({ id: r.id, source: r.source, context: r.modId + '/' + r.category + '/' + r.key }))) }]
+    };
+    const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
+    const response = await fetchWithBackoff('Claude batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
+    if (!response.ok) throw new Error('Claude HTTP ' + response.status + ': ' + await response.text());
+    const payload = await response.json(); const content = (payload.content || []).filter(part => part.type === 'text').map(part => part.text || '').join('');
+    if (!content) throw new Error('Claude response missing text content');
+    const parsed = JSON.parse(content); Object.assign(result, parsed.translations || parsed);
+    processed += batch.length; if (onBatch) onBatch(result);
+    if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
@@ -227,7 +252,7 @@ async function main() {
     } else direct.push({ ...record, target: null, status: 'pending_provider', method: null, appliedRules: [] });
   }
   const providerRecords = direct.filter(r => r.status === 'pending_provider'); let providerMap = {};
-  const providerName = config.provider === 'deepl' || config.provider === 'gemini' || config.provider === 'yandex' || config.provider === 'openai-compatible' ? config.provider : 'openai';
+  const providerName = ['deepl', 'gemini', 'yandex', 'claude', 'deepseek', 'openai-compatible'].includes(config.provider) ? config.provider : 'openai';
   const providerBatches = requestBatches(providerRecords, providerName);
   const plannedWaitSeconds = estimatedWaitSeconds(providerBatches, pacingSettings(providerName));
   const baseCompleted = reusable.length + direct.filter(r => r.status === 'validated').length;
@@ -257,6 +282,7 @@ async function main() {
     else if (config.provider === 'deepl') providerMap = await deepLTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
     else if (config.provider === 'gemini') providerMap = await geminiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
     else if (config.provider === 'yandex') providerMap = await yandexTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
+    else if (config.provider === 'claude') providerMap = await claudeTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
     else providerMap = await apiTranslate(providerBatches, config, rules, updateProgress, plannedWaitSeconds, checkpoint);
   } else if (providerRecords.length) throw new Error('No provider API key. Use --dry-run or configure provider.local.json.');
   const result = buildResult(providerMap);

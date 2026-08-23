@@ -23,6 +23,12 @@ async function main() {
   } else if (config.provider === 'yandex') {
     // Yandex Translate v2 selects the service, not a per-request model ID.
     models = ['yandex-translate-v2'];
+  } else if (config.provider === 'claude') {
+    const response = await fetch('https://api.anthropic.com/v1/models', { headers: { 'x-api-key': config.apiKey, 'anthropic-version': '2023-06-01' } });
+    if (!response.ok) throw new Error('Claude HTTP ' + response.status + ': ' + await response.text());
+    const payload = await response.json(); models = (payload.data || []).map(x => x.id).sort();
+  } else if (config.provider === 'deepseek') {
+    models = ['deepseek-v4-flash', 'deepseek-v4-pro'];
   } else {
     const base = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
     const response = await fetch(base + '/models', { headers: { Authorization: 'Bearer ' + config.apiKey } });

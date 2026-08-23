@@ -7,6 +7,8 @@ const { PROFILES, providerBatchProfile, requestBatches } = require('../tools/wor
 assert.deepEqual(providerBatchProfile('gemini'), { maxItems: 100, maxChars: 8000 });
 assert.deepEqual(providerBatchProfile('deepl'), { maxItems: 100, maxChars: 10000 });
 assert.deepEqual(providerBatchProfile('openai'), { maxItems: 100, maxChars: 8000 });
+assert.deepEqual(providerBatchProfile('deepseek'), { maxItems: 100, maxChars: 8000 });
+assert.deepEqual(providerBatchProfile('claude'), { maxItems: 50, maxChars: 6000 });
 assert.deepEqual(providerBatchProfile('yandex'), { maxItems: 100, maxChars: 8000 });
 assert.deepEqual(providerBatchProfile('unknown'), PROFILES['openai-compatible']);
 

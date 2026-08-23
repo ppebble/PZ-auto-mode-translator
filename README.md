@@ -8,7 +8,7 @@ A Project Zomboid **Build 42 Stable 42.20.x and later** translation companion. I
 - Scans active mods for `Translate/EN` entries and Build 42 `craftRecipe` names.
 - Preserves existing target-language translations and reuses validated local translation memory.
 - Generates the local `PZAITranslationGenerated` overlay pack.
-- Supports Gemini, DeepL, OpenAI, Yandex Cloud Translate, and OpenAI-compatible providers.
+- Supports Gemini, DeepL, OpenAI, Claude, DeepSeek, Yandex Cloud Translate, and OpenAI-compatible providers.
 - Includes an external local Helper because Workshop Lua cannot make HTTP calls or start local processes.
 
 ## Safety rules
@@ -77,13 +77,13 @@ Completed batches are saved locally in the Helper's `runtime\translation-memory.
 
 ## Provider models
 
-`gemini-2.5-flash-lite` is the default Gemini model. DeepL uses translation modes rather than chat-model IDs. Yandex Cloud Translate uses its v2 translation service rather than a selectable model ID. OpenAI-compatible providers require a model ID accepted by that provider.
+`gemini-2.5-flash-lite` is the default Gemini model. Claude uses the Messages API and defaults to `claude-haiku-4-5`; DeepSeek uses its OpenAI-compatible endpoint and defaults to `deepseek-v4-flash`. DeepL uses translation modes rather than chat-model IDs. Yandex Cloud Translate uses its v2 translation service rather than a selectable model ID. OpenAI-compatible providers require a model ID accepted by that provider.
 
 The Helper is local middleware: it sends only unresolved strings using the API key saved in the player's local Zomboid data directory. It does not provide translations or an API account. Provider quotas, billing, and available models are controlled by the player's provider account.
 
 ### Fixed request sizing
 
-Request size is selected by the Helper, not an in-game setting. It keeps the existing 70-second request/mod pacing and uses conservative source-text limits: Gemini 100 strings / 8,000 characters, DeepL 100 / 10,000, OpenAI 100 / 8,000, Yandex 100 / 8,000, and unknown OpenAI-compatible endpoints 20 / 3,000. Batches never mix mods. These limits reduce request count without overriding an account's quota; a 429 can still mean an exhausted provider quota.
+Request size is selected by the Helper, not an in-game setting. It keeps the existing 70-second request/mod pacing and uses conservative source-text limits: Gemini 100 strings / 8,000 characters, DeepL 100 / 10,000, OpenAI and DeepSeek 100 / 8,000, Claude 50 / 6,000, Yandex 100 / 8,000, and unknown OpenAI-compatible endpoints 20 / 3,000. Batches never mix mods. These limits reduce request count without overriding an account's quota; a 429 can still mean an exhausted provider quota.
 
 To fetch account-visible model IDs into the game-side model list:
 
