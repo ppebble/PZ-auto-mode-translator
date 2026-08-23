@@ -18,11 +18,11 @@ local function tickValue(option)
     return option:getValue()
 end
 
-local providerLabels = { "Google Gemini API", "DeepL API", "OpenAI API", "OpenAI-compatible custom" }
-local providerValues = { "gemini", "deepl", "openai", "openai-compatible" }
+local providerLabels = { "Google Gemini API", "DeepL API", "OpenAI API", "Yandex Cloud Translate API", "OpenAI-compatible custom" }
+local providerValues = { "gemini", "deepl", "openai", "yandex", "openai-compatible" }
 -- These are Project Zomboid translation-directory codes, not provider codes.
 local languageValues = { "KO", "JP", "CN", "CH", "ES", "FR", "DE", "IT", "PTBR", "PL", "RU", "TR" }
-local modelValues = { "Gemini: gemini-2.5-flash-lite", "Gemini: gemini-2.5-flash", "DeepL: default", "DeepL: prefer_quality_optimized", "DeepL: quality_optimized", "DeepL: latency_optimized", "OpenAI: gpt-5-mini", "OpenAI: gpt-5", "OpenAI: gpt-4.1-mini", "Custom model ID" }
+local modelValues = { "Gemini: gemini-2.5-flash-lite", "Gemini: gemini-2.5-flash", "DeepL: default", "DeepL: prefer_quality_optimized", "DeepL: quality_optimized", "DeepL: latency_optimized", "OpenAI: gpt-5-mini", "OpenAI: gpt-5", "OpenAI: gpt-4.1-mini", "Yandex: yandex-translate-v2", "Custom model ID" }
 local function addAccountModels()
     local reader = getFileReader("PZAITranslator_models.ini", true)
     if not reader then return end
@@ -42,13 +42,14 @@ addAccountModels()
 
 options:addTitle(optionTitle)
 options:addDescription("Queue creates a local request. The external helper writes running, complete, or failed status here. Provider-specific models are listed; use Custom model ID only when your provider documents a different model.")
-local providerChoice = options:addComboBox("providerChoice", "Provider", "Gemini and DeepL offer free tiers with provider-specific quotas. OpenAI-compatible custom supports services using the Chat Completions protocol.")
+local providerChoice = options:addComboBox("providerChoice", "Provider", "The Helper sends requests through your own provider account and API key. Each provider applies its own quota and billing rules. OpenAI-compatible custom supports the Chat Completions protocol.")
 for index, label in ipairs(providerLabels) do providerChoice:addItem(label, providerValues[index] == saved.provider) end
-local baseUrl = options:addTextEntry("baseUrl", "Custom Base URL", saved.baseUrl, "Only for OpenAI-compatible custom. OpenAI, Gemini, and DeepL use their official endpoints.")
+local baseUrl = options:addTextEntry("baseUrl", "Custom Base URL", saved.baseUrl, "Only for OpenAI-compatible custom. Gemini, DeepL, OpenAI, and Yandex use their official endpoints.")
 local modelChoice = options:addComboBox("modelChoice", "Translation model", "Choose a model matching the selected provider. DeepL entries choose translation quality/speed mode, not a chat model.")
 for _, value in ipairs(modelValues) do
     local selected = value:find(saved.model or "", 1, true) ~= nil and saved.model ~= ""
     if saved.provider == "deepl" and value == "DeepL: " .. (saved.model ~= "" and saved.model or "default") then selected = true end
+    if saved.provider == "yandex" and value == "Yandex: yandex-translate-v2" then selected = true end
     modelChoice:addItem(value, selected)
 end
 local customModel = options:addTextEntry("customModel", "Custom model ID", saved.model, "Only used with Custom model ID.")
@@ -106,6 +107,7 @@ local function saveSettings()
     if accountModel then model = selectedModel:gsub("^Account:%s*", "") end
     if provider == "gemini" and selectedModel:find("Gemini:", 1, true) ~= 1 and not accountModel then model = "gemini-2.5-flash-lite" end
     if provider == "deepl" and selectedModel:find("DeepL:", 1, true) ~= 1 and not accountModel then model = "default" end
+    if provider == "yandex" then model = "yandex-translate-v2" end
     if (provider == "openai" or provider == "openai-compatible") and selectedModel:find("OpenAI:", 1, true) ~= 1 and selectedModel ~= "Custom model ID" and not accountModel then model = "gpt-5-mini" end
     local base = textValue(baseUrl)
     if provider ~= "openai-compatible" then base = "" end

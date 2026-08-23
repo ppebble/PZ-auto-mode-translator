@@ -20,6 +20,9 @@ async function main() {
     models = (payload.models || []).filter(x => (x.supportedGenerationMethods || []).includes('generateContent')).map(x => x.name.replace(/^models\//, '')).sort();
   } else if (config.provider === 'deepl') {
     models = ['default', 'prefer_quality_optimized', 'quality_optimized', 'latency_optimized'];
+  } else if (config.provider === 'yandex') {
+    // Yandex Translate v2 selects the service, not a per-request model ID.
+    models = ['yandex-translate-v2'];
   } else {
     const base = (config.baseUrl || 'https://api.openai.com/v1').replace(/\/$/, '');
     const response = await fetch(base + '/models', { headers: { Authorization: 'Bearer ' + config.apiKey } });
