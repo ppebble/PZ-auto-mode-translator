@@ -29,7 +29,7 @@ function updateTranslationMemory(file, targetLanguage, records) {
 }
 function writeStatus(file, values) {
   if (!file) return;
-  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod', 'waitSeconds', 'estimatedWaitSeconds', 'errorCode', 'apiCharacters', 'requestCount', 'estimatedInputTokens', 'estimatedOutputTokens', 'estimatedCostUsd'];
+  const ordered = ['state', 'phase', 'message', 'total', 'completed', 'reused', 'failed', 'retries', 'currentMod', 'batchIndex', 'batchCount', 'waitSeconds', 'estimatedWaitSeconds', 'errorCode', 'apiCharacters', 'requestCount', 'estimatedInputTokens', 'estimatedOutputTokens', 'estimatedCostUsd'];
   const lines = ordered.filter(key => values[key] !== undefined && values[key] !== null)
     .map(key => key + '=' + String(values[key]).replace(/[\r\n]/g, ' '));
   lines.push('updatedAt=' + new Date().toISOString());
@@ -296,11 +296,19 @@ async function main() {
   const baseFailed = unresolved.length;
   const total = reusable.length + pending.length;
   let retries = 0;
+  let currentBatchIndex = providerBatches.length > 0 ? 1 : 0;
   const updateProgress = (processed, currentMod, details = {}) => {
     if (details.retry) retries++;
+    if (processed !== null && processed !== undefined && providerBatches.length > 0) {
+      let boundary = 0; currentBatchIndex = providerBatches.length;
+      for (let index = 0; index < providerBatches.length; index++) {
+        boundary += providerBatches[index].length;
+        if (processed < boundary) { currentBatchIndex = index + 1; break; }
+      }
+    }
     writeStatus(statusFile, {
       state: 'running', phase: details.phase || 'translating', message: details.message || (details.retry ? `Retrying after HTTP ${details.status} (${details.attempt}/5).` : 'Translating selected mod text.'),
-      total, completed: baseCompleted + (processed || 0), reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || '', waitSeconds: details.waitSeconds || 0, estimatedWaitSeconds: details.estimatedWaitSeconds || plannedWaitSeconds, apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6)
+      total, completed: baseCompleted + (processed || 0), reused: reusable.length, failed: baseFailed, retries, currentMod: currentMod || '', batchIndex: currentBatchIndex, batchCount: providerBatches.length, waitSeconds: details.waitSeconds || 0, estimatedWaitSeconds: details.estimatedWaitSeconds || plannedWaitSeconds, apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6)
     });
   };
   updateProgress(0, providerRecords[0] && providerRecords[0].modId, { phase: 'estimating', message: `Plan: ${usage.sourceChars} API characters, ${usage.requestCount} request(s), about ${usage.inputTokens} input tokens${usage.estimatedCostUsd === null ? '; cost estimate unavailable until account rates are configured.' : `, about $${usage.estimatedCostUsd.toFixed(4)}`}.`, estimatedWaitSeconds: plannedWaitSeconds });
@@ -327,7 +335,7 @@ async function main() {
   const result = buildResult(providerMap);
   checkpoint(providerMap);
   writeJson(output, result);
-  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: result.summary.reused, failed: result.summary.needsReview, retries, currentMod: '', apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6) });
+  writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: result.summary.reused, failed: result.summary.needsReview, retries, currentMod: '', batchIndex: providerBatches.length, batchCount: providerBatches.length, apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6) });
   console.log(JSON.stringify({ output, summary: result.summary }, null, 2));
 }
 module.exports = { applyRules, validate };

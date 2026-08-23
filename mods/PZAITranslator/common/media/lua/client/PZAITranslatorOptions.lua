@@ -60,16 +60,16 @@ local languageChoice = options:addComboBox("targetLanguage", "Target language", 
 for _, value in ipairs(languageValues) do languageChoice:addItem(value, value == saved.targetLanguage) end
 local skipModsWithTarget = options:addTickBox("skipModsWithTarget", "Skip mods that already provide the target language", saved.skipModsWithTarget, "When enabled, a mod with any non-empty target-language JSON translation is not sent to AI. Disable it to fill missing strings in partially translated mods.")
 local function statusLabel()
-    local state, message = PZAITranslator.status()
+    local state = PZAITranslator.status()
     local info = PZAITranslator.statusInfo()
     local labels = {
-        idle = "Idle - no translation job requested.",
-        needs_configuration = "Configuration required - enter a new API key and provider.",
-        queued = "Queued - Helper has not confirmed this job. Start Translation Helper if it stays queued.",
-        running = "Running - local helper is processing the job.",
-        paused = "Paused - no later batch will be sent. Resume uses saved completed batches.",
-        complete = "Complete - enable PZAITranslationGenerated, return to the main menu, then enter the world again.",
-        failed = "Failed - completed batches are saved. Change the model if needed, then resume."
+        idle = "Idle",
+        needs_configuration = "Configuration",
+        queued = "Queued",
+        running = "Running",
+        paused = "Paused",
+        complete = "Complete",
+        failed = "Failed"
     }
     local total = tonumber(info.total or "0") or 0
     local completed = tonumber(info.completed or "0") or 0
@@ -78,21 +78,27 @@ local function statusLabel()
     local retries = tonumber(info.retries or "0") or 0
     local waitSeconds = tonumber(info.waitSeconds or "0") or 0
     local estimatedWaitSeconds = tonumber(info.estimatedWaitSeconds or "0") or 0
-    local apiCharacters = tonumber(info.apiCharacters or "0") or 0
     local requestCount = tonumber(info.requestCount or "0") or 0
-    local inputTokens = tonumber(info.estimatedInputTokens or "0") or 0
-    local cost = info.estimatedCostUsd or ""
+    local batchIndex = tonumber(info.batchIndex or "0") or 0
+    local batchCount = tonumber(info.batchCount or "0") or 0
     local function duration(seconds)
         if seconds < 60 then return tostring(seconds) .. "s" end
         return tostring(math.floor(seconds / 60)) .. "m " .. tostring(seconds % 60) .. "s"
     end
-    local progress = total > 0 and (tostring(completed) .. "/" .. tostring(total) .. " | Reused " .. tostring(reused) .. " | Failed " .. tostring(failed) .. " | Retries " .. tostring(retries)) or "No item count yet"
-    if estimatedWaitSeconds > 0 then progress = progress .. " | Planned wait ~" .. duration(estimatedWaitSeconds) end
-    if waitSeconds > 0 then progress = progress .. " | Next batch in " .. duration(waitSeconds) end
-    if apiCharacters > 0 then progress = progress .. " | Plan " .. tostring(apiCharacters) .. " chars / " .. tostring(requestCount) .. " requests / ~" .. tostring(inputTokens) .. " input tokens" end
-    if cost ~= "" then progress = progress .. " / ~$" .. tostring(cost) end
-    local failure = state == "failed" and info.errorCode and info.errorCode ~= "" and (" (HTTP " .. tostring(info.errorCode) .. ")") or ""
-    return (labels[state] or tostring(state)) .. failure .. " | " .. progress
+    local parts = { labels[state] or tostring(state) }
+    if batchCount > 0 then
+        table.insert(parts, "Batch " .. tostring(math.max(1, batchIndex)) .. "/" .. tostring(batchCount))
+    elseif state == "running" and requestCount > 0 then
+        table.insert(parts, "Batches " .. tostring(requestCount))
+    end
+    if total > 0 then table.insert(parts, "Items " .. tostring(completed) .. "/" .. tostring(total)) end
+    if reused > 0 then table.insert(parts, "Reused " .. tostring(reused)) end
+    if failed > 0 then table.insert(parts, "Failed " .. tostring(failed)) end
+    if retries > 0 then table.insert(parts, "Retries " .. tostring(retries)) end
+    if waitSeconds > 0 then table.insert(parts, "Wait " .. duration(waitSeconds))
+    elseif state == "running" and estimatedWaitSeconds > 0 then table.insert(parts, "ETA " .. duration(estimatedWaitSeconds)) end
+    if state == "failed" and info.errorCode and info.errorCode ~= "" then table.insert(parts, "HTTP " .. tostring(info.errorCode)) end
+    return table.concat(parts, " | ")
 end
 local statusIndicator = options:addTextEntry("statusIndicator", "Translation status", statusLabel(), "Read-only status. Use Refresh status to update it.")
 statusIndicator:setEnabled(false)
@@ -100,11 +106,13 @@ local statusDetail = options:addTextEntry("statusDetail", "Status detail", "", "
 statusDetail:setEnabled(false)
 
 local function statusDetailLabel()
-    local state, message = PZAITranslator.status()
+    local state = PZAITranslator.status()
     local info = PZAITranslator.statusInfo()
-    local current = info.currentMod and info.currentMod ~= "" and ("Current mod: " .. info.currentMod .. " | ") or ""
-    if state == "queued" then return current .. tostring(message or "") .. " Start Translation Helper if the state does not become Running." end
-    return current .. tostring(message or "")
+    local parts = {}
+    if info.phase and info.phase ~= "" and info.phase ~= state then table.insert(parts, "Phase " .. tostring(info.phase)) end
+    if info.currentMod and info.currentMod ~= "" then table.insert(parts, "Mods " .. tostring(info.currentMod)) end
+    if state == "queued" then table.insert(parts, "Helper pending") end
+    return table.concat(parts, " | ")
 end
 
 local function saveSettings()

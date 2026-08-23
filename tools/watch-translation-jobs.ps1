@@ -29,7 +29,7 @@ function Read-Ini([string]$Path) {
 }
 function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{}) {
     $lines = @("state=$State", "message=$Message")
-    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','waitSeconds','estimatedWaitSeconds','errorCode','apiCharacters','requestCount','estimatedInputTokens','estimatedOutputTokens','estimatedCostUsd')) {
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','batchIndex','batchCount','waitSeconds','estimatedWaitSeconds','errorCode','apiCharacters','requestCount','estimatedInputTokens','estimatedOutputTokens','estimatedCostUsd')) {
         if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
     }
     $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
@@ -120,12 +120,12 @@ try {
         $previousFailed = 0
         if ($last.ContainsKey('failed')) { $previousFailed = [int]$last.failed }
         if ($_.Exception.Message -match 'Translation paused by user') {
-            Write-Status 'paused' 'Paused. Completed batches were saved; use Resume interrupted translation when ready.' @{ phase = 'paused'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = $last.currentMod; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; apiCharacters = $last.apiCharacters; requestCount = $last.requestCount; estimatedInputTokens = $last.estimatedInputTokens; estimatedOutputTokens = $last.estimatedOutputTokens; estimatedCostUsd = $last.estimatedCostUsd }
+            Write-Status 'paused' 'Paused. Completed batches were saved; use Resume interrupted translation when ready.' @{ phase = 'paused'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = $last.currentMod; batchIndex = $last.batchIndex; batchCount = $last.batchCount; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; apiCharacters = $last.apiCharacters; requestCount = $last.requestCount; estimatedInputTokens = $last.estimatedInputTokens; estimatedOutputTokens = $last.estimatedOutputTokens; estimatedCostUsd = $last.estimatedCostUsd }
             if (Test-Path -LiteralPath $job) { Move-Item -LiteralPath $job -Destination ($job + '.paused') -Force }
             continue
         }
         $errorCode = Get-ErrorCode $_.Exception.Message
-        Write-Status 'failed' (Friendly-Error $_.Exception.Message) @{ phase = 'failed'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = ($previousFailed + 1); retries = $last.retries; currentMod = $last.currentMod; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; errorCode = $errorCode }
+        Write-Status 'failed' (Friendly-Error $_.Exception.Message) @{ phase = 'failed'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = ($previousFailed + 1); retries = $last.retries; currentMod = $last.currentMod; batchIndex = $last.batchIndex; batchCount = $last.batchCount; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; errorCode = $errorCode }
         Write-Warning $_.Exception.Message
         # A failed request must not be retried forever: it can repeatedly spend
         # provider quota or hide the original error behind a rapid status loop.

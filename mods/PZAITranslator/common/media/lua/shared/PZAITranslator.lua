@@ -74,7 +74,7 @@ function PZAITranslator.writeStatus(state, message, details)
     if not writer then return false end
     writer:write("state=" .. tostring(state or "idle") .. "\n")
     writer:write("message=" .. tostring(message or "") .. "\n")
-    for _, key in ipairs({ "phase", "total", "completed", "reused", "failed", "retries", "currentMod" }) do
+    for _, key in ipairs({ "phase", "total", "completed", "reused", "failed", "retries", "currentMod", "batchIndex", "batchCount" }) do
         if details and details[key] ~= nil then writer:write(key .. "=" .. tostring(details[key]) .. "\n") end
     end
     writer:close()

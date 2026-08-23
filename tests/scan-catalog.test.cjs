@@ -67,6 +67,8 @@ try {
   const statusText = fs.readFileSync(status, 'utf8');
   assert.match(statusText, /apiCharacters=9/);
   assert.match(statusText, /requestCount=1/);
+  assert.match(statusText, /batchIndex=1/);
+  assert.match(statusText, /batchCount=1/);
   assert.match(statusText, /estimatedInputTokens=3/);
   const pauseFile = path.join(root, 'pause.ini');
   const pausedStatus = path.join(root, 'paused-status.ini');
