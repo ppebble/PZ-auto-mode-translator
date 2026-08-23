@@ -42,6 +42,13 @@ function legacyMod(id, translations) {
   }
 }
 
+function legacyFile(base, language, category, values) {
+  const dir = path.join(base, 'media', 'lua', 'shared', 'Translate', language);
+  const rows = Object.entries(values).map(([key, value]) => `\t${key} = "${value}",`).join('\n');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${category}_${language}.txt`), `${category}_${language} = {\n${rows}\n}\n`, 'utf8');
+}
+
 try {
   fs.mkdirSync(path.join(home, 'mods'), { recursive: true });
   fs.writeFileSync(path.join(home, 'mods', 'default.txt'), 'mod=MainMod\nmod=ExternalOverlay\nmod=PZAITranslationGenerated\n', 'utf8');
@@ -117,6 +124,32 @@ try {
   const legacyPack = path.join(root, 'legacy-pack');
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'materialize-b42.cjs'), '--input', translated, '--output', legacyPack, '--allow-dry-run'], { stdio: 'pipe' });
   assert.match(fs.readFileSync(path.join(legacyPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'IG_UI_KO.txt'), 'utf8'), /IGUI_VehicleNameLegacy = "\[DRY-RUN KO\] 89 LAND ROVER Defender",/);
+
+  const craftBase = path.join(home, 'mods', 'LegacyCraft', 'common');
+  fs.mkdirSync(path.join(craftBase, 'media', 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(craftBase, 'mod.info'), 'name=LegacyCraft\nid=LegacyCraft\n', 'utf8');
+  fs.writeFileSync(path.join(craftBase, 'media', 'scripts', 'recipes.txt'), 'craftRecipe LegacyCraftMakeFrontBumper\n{\n}\n', 'utf8');
+  legacyFile(craftBase, 'EN', 'Recipes', { Recipe_LegacyCraftMakeFrontBumper: 'Make Legacy Craft Front Bumper' });
+  const generatedBase = path.join(home, 'mods', 'PZAITranslationGenerated', 'common');
+  legacyFile(generatedBase, 'KO', 'Recipes', { Recipe_LegacyCraftMakeFrontBumper: '레거시 크래프트 전면 범퍼 제작' });
+  const generatedRecipes = path.join(generatedBase, 'media', 'lua', 'shared', 'Translate', 'KO', 'Recipes.json');
+  fs.writeFileSync(generatedRecipes, JSON.stringify({ LegacyCraftMakeFrontBumper: 'LegacyCraftMakeFrontBumper' }), 'utf8');
+  fs.writeFileSync(path.join(home, 'mods', 'default.txt'), 'mod=LegacyCraft\nmod=PZAITranslationGenerated\n', 'utf8');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory], { stdio: 'pipe' });
+  const bridged = JSON.parse(fs.readFileSync(output, 'utf8'));
+  const bridgedRecipe = bridged.records.find(record => record.modId === 'LegacyCraft' && record.key === 'LegacyCraftMakeFrontBumper');
+  assert.equal(bridged.records.some(record => record.key === 'Recipe_LegacyCraftMakeFrontBumper'), false);
+  assert.equal(bridgedRecipe.source, 'Make Legacy Craft Front Bumper');
+  assert.equal(bridgedRecipe.target, '레거시 크래프트 전면 범퍼 제작');
+  assert.equal(bridgedRecipe.status, 'existing_generated');
+  assert.equal(bridgedRecipe.sourceKind, 'craftRecipe');
+  assert.equal(bridged.summary.pending, 0);
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--dry-run'], { stdio: 'pipe' });
+  const bridgedPack = path.join(root, 'bridged-pack');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'materialize-b42.cjs'), '--input', translated, '--output', bridgedPack, '--allow-dry-run'], { stdio: 'pipe' });
+  const bridgedRecipes = JSON.parse(fs.readFileSync(path.join(bridgedPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'Recipes.json'), 'utf8'));
+  assert.equal(bridgedRecipes.LegacyCraftMakeFrontBumper, 'Legacy Craft 전면 범퍼 제작');
+  assert.equal(Object.hasOwn(bridgedRecipes, 'Recipe_LegacyCraftMakeFrontBumper'), false);
 
   const steamRoot = path.join(root, 'Steam', 'steamapps', 'workshop', 'content', '108600');
   const steamAcf = path.join(root, 'Steam', 'steamapps', 'workshop', 'appworkshop_108600.acf');

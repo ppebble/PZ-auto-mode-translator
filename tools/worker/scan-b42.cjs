@@ -382,24 +382,49 @@ function main() {
       catch (error) { summary.errors++; errors.push({ modId: mod.id, file: script.file, error: String(error.message || error) }); continue; }
       for (const key of names) {
         const recordKey = `${mod.id}|recipes|${key}`;
+        const legacyRecordKey = `${mod.id}|recipes|Recipe_${key}`;
+        const legacyRecord = records.get(legacyRecordKey);
         // A proper Translate/EN/Recipes.json entry is the higher-quality
         // source when the mod supplies one; scripts fill only missing keys.
-        if (records.has(recordKey)) continue;
+        // Some B42 mods still ship the older Recipes_EN.txt key shape
+        // (`Recipe_<craftRecipe id>`). Bridge its human-readable source and
+        // validated target into the raw B42 Recipes.json key instead of
+        // translating the internal camel-case identifier as a second item.
+        if (records.has(recordKey)) {
+          if (legacyRecord) records.delete(legacyRecordKey);
+          continue;
+        }
         summary.craftRecipes++;
-        const id = `${mod.id}|Recipes|${key}|${sha256(key)}`; const overlay = overlays.get('recipes|' + key); const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated'; const externalOverlay = overlay && overlay.modId !== mod.id && !generatedOverlay;
+        if (legacyRecord) records.delete(legacyRecordKey);
+        const source = legacyRecord ? legacyRecord.source : key;
+        const id = `${mod.id}|Recipes|${key}|${sha256(source)}`;
+        const overlay = overlays.get('recipes|' + key);
+        const generatedOverlay = overlay && overlay.modId === 'PZAITranslationGenerated';
+        const externalOverlay = overlay && overlay.modId !== mod.id && !generatedOverlay;
+        const qualityRecord = { category: 'Recipes', key, source };
+        const memoryTarget = reusableGeneratedTarget(qualityRecord, memory.get(id));
+        const generatedTarget = generatedOverlay && overlay.target !== key ? reusableGeneratedTarget(qualityRecord, overlay.target) : null;
+        // A matching legacy target is the authoritative display text. This
+        // also replaces stale generated JSON values that merely repeat `key`.
+        const bridgedTarget = legacyRecord && isTranslatable(legacyRecord.target) && legacyRecord.target !== key ? legacyRecord.target : null;
+        const target = externalOverlay ? overlay.target : (bridgedTarget || memoryTarget || generatedTarget || null);
+        const status = externalOverlay ? 'existing_overlay' : (target ? 'existing_generated' : 'pending');
         records.set(recordKey, {
           id,
           modId: mod.id, modPath: mod.dir, category: 'Recipes',
           sourceFile: '@scripts/' + path.relative(mod.dir, script.file).replace(/\\/g, '/'),
           layout: script.layout, layoutVersion: script.version,
-          key, source: key, target: memory.get(id) || (overlay && overlay.target) || null,
-          targetLanguage, sourceHash: sha256(key), status: externalOverlay ? 'existing_overlay' : ((memory.has(id) || generatedOverlay) ? 'existing_generated' : 'pending'), sourceKind: 'craftRecipe',
+          key, source, target,
+          targetLanguage, sourceHash: sha256(source), status, sourceKind: 'craftRecipe',
+          legacySourceKey: legacyRecord ? legacyRecord.key : null,
         });
       }
     }
   }
   const finalRecords = [...records.values()];
   summary.existing = finalRecords.filter(x => x.status === 'existing').length;
+  summary.existing_overlay = finalRecords.filter(x => x.status === 'existing_overlay').length;
+  summary.existing_generated = finalRecords.filter(x => x.status === 'existing_generated').length;
   summary.reused = finalRecords.filter(x => x.status === 'existing_generated').length;
   summary.pending = finalRecords.filter(x => x.status === 'pending').length;
   const perMod = new Map();
