@@ -109,7 +109,6 @@ try {
         $startMessage = if ($request.action -eq 'resume') { 'Resuming translation from saved checkpoints with the selected provider/model.' } else { 'Starting translation job.' }
         Write-Status 'running' $startMessage @{ phase = 'scanning'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
         $runArgs = @{ ZomboidHome = $ZomboidHome; TargetLanguage = $language; Provider = $providerJson; StatusFile = $status; PauseFile = $pause; Install = $true }
-        if ($request.skipModsWithTarget -eq '1') { $runArgs.SkipModsWithTarget = $true }
         if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $runArgs.IncludeMods = $request.includeMods }
         & (Join-Path $PSScriptRoot 'run-translation.ps1') @runArgs
         Move-Item -LiteralPath $job -Destination ($job + '.done') -Force

@@ -34,11 +34,7 @@ function PZAITranslator.loadProviderSettings()
         baseUrl = stored.baseUrl or "https://api.openai.com/v1",
         model = stored.model or "",
         apiKey = stored.apiKey or "",
-        targetLanguage = stored.targetLanguage or "KO",
-        -- The scanner already preserves every non-empty target key. Default to
-        -- scanning partial translation packs so only their missing keys reach
-        -- the API; users may still opt into skipping whole translated mods.
-        skipModsWithTarget = stored.skipModsWithTarget == "1"
+        targetLanguage = stored.targetLanguage or "KO"
     }
 end
 
@@ -50,7 +46,6 @@ function PZAITranslator.saveProviderSettings(settings)
     writer:write("model=" .. tostring(settings.model or "") .. "\n")
     writer:write("apiKey=" .. tostring(settings.apiKey or "") .. "\n")
     writer:write("targetLanguage=" .. tostring(settings.targetLanguage or "KO") .. "\n")
-    writer:write("skipModsWithTarget=" .. (settings.skipModsWithTarget == false and "0" or "1") .. "\n")
     writer:close()
     return true
 end
@@ -96,7 +91,6 @@ function PZAITranslator.requestTranslation(action)
     if not writer then return false end
     writer:write("action=" .. (action == "resume" and "resume" or "translate") .. "\n")
     writer:write("targetLanguage=" .. tostring(PZAITranslator.loadProviderSettings().targetLanguage or "KO") .. "\n")
-    writer:write("skipModsWithTarget=" .. (PZAITranslator.loadProviderSettings().skipModsWithTarget == false and "0" or "1") .. "\n")
     local selected = PZAITranslator.loadTargetSelection()
     if #selected > 0 then writer:write("includeMods=" .. table.concat(selected, ",") .. "\n") end
     writer:write("requested=1\n")

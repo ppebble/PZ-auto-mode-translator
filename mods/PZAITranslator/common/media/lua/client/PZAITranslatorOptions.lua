@@ -13,11 +13,6 @@ end
 local function selectedValue(option, values)
     return values[option:getValue()] or values[1]
 end
-local function tickValue(option)
-    if option.element ~= nil then return option.element:isSelected(1) end
-    return option:getValue()
-end
-
 local providerLabels = { "Google Gemini API", "DeepL API", "OpenAI API", "Claude API", "DeepSeek API", "Yandex Cloud Translate API", "OpenAI-compatible custom" }
 local providerValues = { "gemini", "deepl", "openai", "claude", "deepseek", "yandex", "openai-compatible" }
 -- These are Project Zomboid translation-directory codes, not provider codes.
@@ -58,7 +53,6 @@ local customModel = options:addTextEntry("customModel", "Custom model ID", saved
 local apiKey = options:addTextEntry("apiKey", "API Key", saved.apiKey, "Saved locally by the game. Revoke a key if it is exposed.")
 local languageChoice = options:addComboBox("targetLanguage", "Target language", "Project Zomboid language code. JP is Japanese; provider-specific codes are converted by the worker.")
 for _, value in ipairs(languageValues) do languageChoice:addItem(value, value == saved.targetLanguage) end
-local skipModsWithTarget = options:addTickBox("skipModsWithTarget", "Skip mods that already provide the target language", saved.skipModsWithTarget, "When enabled, a mod with any non-empty target-language JSON translation is not sent to AI. Disable it to fill missing strings in partially translated mods.")
 local function statusLabel()
     local state = PZAITranslator.status()
     local info = PZAITranslator.statusInfo()
@@ -86,10 +80,31 @@ local function statusLabel()
         return tostring(math.floor(seconds / 60)) .. "m " .. tostring(seconds % 60) .. "s"
     end
     local parts = { labels[state] or tostring(state) }
-    if batchCount > 0 then
+    local phaseLabels = {
+        idle = "Ready",
+        queued = "Waiting",
+        scanning = "Calc...",
+        estimating = "Calc...",
+        translating = "Translate",
+        waiting = "Wait",
+        validating = "Validate",
+        generating = "Pack",
+        installing = "Install",
+        testing = "Test",
+        paused = "Saved",
+        complete = "Installed",
+        failed = "Error"
+    }
+    if state == "running" and batchCount > 0 then
         table.insert(parts, "Batch " .. tostring(math.max(1, batchIndex)) .. "/" .. tostring(batchCount))
     elseif state == "running" and requestCount > 0 then
         table.insert(parts, "Batches " .. tostring(requestCount))
+    else
+        local phase = tostring(info.phase or "")
+        local stage = phaseLabels[phase] or phaseLabels[state]
+        if state == "needs_configuration" then stage = "Setup" end
+        if state == "running" and (stage == nil or stage == "") then stage = "Calc..." end
+        if stage ~= nil and stage ~= "" then table.insert(parts, stage) end
     end
     if total > 0 then table.insert(parts, "Items " .. tostring(completed) .. "/" .. tostring(total)) end
     if reused > 0 then table.insert(parts, "Reused " .. tostring(reused)) end
@@ -130,7 +145,7 @@ local function saveSettings()
     if (provider == "openai" or provider == "openai-compatible") and selectedModel:find("OpenAI:", 1, true) ~= 1 and selectedModel ~= "Custom model ID" and not accountModel then model = "gpt-5-mini" end
     local base = textValue(baseUrl)
     if provider ~= "openai-compatible" then base = "" end
-    return PZAITranslator.saveProviderSettings({ provider = provider, baseUrl = base, model = model, apiKey = textValue(apiKey), targetLanguage = selectedValue(languageChoice, languageValues), skipModsWithTarget = tickValue(skipModsWithTarget) })
+    return PZAITranslator.saveProviderSettings({ provider = provider, baseUrl = base, model = model, apiKey = textValue(apiKey), targetLanguage = selectedValue(languageChoice, languageValues) })
 end
 
 function options:apply() saveSettings() end
