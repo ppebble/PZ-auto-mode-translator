@@ -18,6 +18,12 @@ $providerJson = Join-Path $root 'runtime\provider-from-game.json'
 $status = Join-Path $lua 'PZAITranslator_status.ini'
 $pause = Join-Path $lua 'PZAITranslator_pause.ini'
 $lock = Join-Path $lua 'PZAITranslator_helper.lock'
+$reviewCatalog = Join-Path $lua 'PZAITranslator_review.ini'
+$reviewEdits = Join-Path $lua 'PZAITranslator_review_edits.ini'
+$luaCandidates = Join-Path $lua 'PZAITranslator_lua_candidates.ini'
+$translatedManifest = Join-Path $root 'runtime\translated-manifest.json'
+$translationMemory = Join-Path $root 'runtime\translation-memory.json'
+$generatedPack = Join-Path $root 'runtime\generated-pack'
 
 function Read-Ini([string]$Path) {
     $result = @{}
@@ -81,7 +87,47 @@ try {
     if (-not (Test-Path -LiteralPath $job)) { Start-Sleep -Seconds $PollSeconds; continue }
     try {
         $request = Read-Ini $job
-        if ($request.action -ne 'translate' -and $request.action -ne 'resume' -and $request.action -ne 'test_connection') { throw 'Unsupported local job action.' }
+        if ($request.action -notin @('translate','resume','test_connection','apply_review','scan_lua')) { throw 'Unsupported local job action.' }
+        $language = $request.targetLanguage
+        if ([string]::IsNullOrWhiteSpace($language)) { $language = 'KO' }
+        if ($request.action -eq 'scan_lua') {
+            if ([string]::IsNullOrWhiteSpace($request.includeMods)) { throw 'Select and save at least one mod before scanning Lua candidates.' }
+            Write-Status 'running' 'Scanning selected mods for review-only hardcoded Lua UI strings.' @{ phase = 'scanning'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
+            $luaScanManifest = Join-Path $root 'runtime\lua-scan-manifest.json'
+            $scanArgs = @((Join-Path $PSScriptRoot 'worker\scan-b42.cjs'), '--zomboid-home', $ZomboidHome, '--target-language', $language, '--exclude', 'PZAITranslator,PZAITranslationGenerated', '--translation-memory', $translationMemory, '--output', $luaScanManifest, '--no-catalog')
+            if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $scanArgs += @('--include-mods', $request.includeMods) }
+            $scanOutput = & node @scanArgs 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($scanOutput | Out-String).Trim() }
+            $candidateOutput = & node (Join-Path $PSScriptRoot 'worker\scan-lua-hardcoded.cjs') --manifest $luaScanManifest --output $luaCandidates 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($candidateOutput | Out-String).Trim() }
+            $candidateCount = 0
+            if (Test-Path -LiteralPath $luaCandidates) { $candidateCount = (Select-String -LiteralPath $luaCandidates -Pattern '^candidate=').Count }
+            Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
+            Write-Status 'complete' 'Lua candidates scanned. Review and explicitly select items; no source mod or translation pack was changed.' @{ phase = 'complete'; total = $candidateCount; completed = $candidateCount; reused = 0; failed = 0; retries = 0; currentMod = '' }
+            continue
+        }
+        if ($request.action -eq 'apply_review') {
+            if (-not (Test-Path -LiteralPath $translatedManifest)) { throw 'No translated manifest exists to review.' }
+            if (-not (Test-Path -LiteralPath $reviewEdits)) { throw 'No saved review edits exist.' }
+            Write-Status 'running' 'Applying reviewed translations and rebuilding the generated overlay.' @{ phase = 'validating'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
+            $reviewReport = Join-Path $root 'runtime\review-apply-report.json'
+            $reviewOutput = & node (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode apply --input $translatedManifest --edits $reviewEdits --output $translatedManifest --translation-memory $translationMemory --report $reviewReport 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($reviewOutput | Out-String).Trim() }
+            $materializeOutput = & node (Join-Path $PSScriptRoot 'worker\materialize-b42.cjs') --input $translatedManifest --output $generatedPack 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($materializeOutput | Out-String).Trim() }
+            $modsRoot = [System.IO.Path]::GetFullPath((Join-Path $ZomboidHome 'mods'))
+            $destination = [System.IO.Path]::GetFullPath((Join-Path $modsRoot 'PZAITranslationGenerated'))
+            if (-not $destination.StartsWith($modsRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Generated pack destination escaped the Zomboid mods directory.' }
+            if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $destination | Out-Null
+            Copy-Item -Path (Join-Path $generatedPack '*') -Destination $destination -Recurse -Force
+            $exportOutput = & node (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode export --input $translatedManifest --output $reviewCatalog 2>&1
+            if ($LASTEXITCODE -ne 0) { throw ($exportOutput | Out-String).Trim() }
+            $review = Get-Content -LiteralPath $reviewReport -Raw -Encoding utf8 | ConvertFrom-Json
+            Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
+            Write-Status 'complete' ("Review applied: $($review.applied) edit(s), $($review.rejected) rejected. Reload the game translation data.") @{ phase = 'complete'; total = ($review.applied + $review.rejected); completed = $review.applied; reused = 0; failed = $review.rejected; retries = 0; currentMod = '' }
+            continue
+        }
         if (-not (Test-Path -LiteralPath $providerIni)) { throw 'Save provider settings in Mod Options before queuing a job.' }
         $settings = Read-Ini $providerIni
         if ([string]::IsNullOrWhiteSpace($settings.apiKey) -or [string]::IsNullOrWhiteSpace($settings.model)) { throw 'API key and model are required.' }
@@ -89,8 +135,6 @@ try {
         $costEstimate = Read-CostEstimate
         if ($null -ne $costEstimate) { $runtimeProvider.costEstimate = $costEstimate }
         $runtimeProvider | ConvertTo-Json | Set-Content -LiteralPath $providerJson -Encoding utf8
-        $language = $request.targetLanguage
-        if ([string]::IsNullOrWhiteSpace($language)) { $language = 'KO' }
         if ($request.action -eq 'test_connection') {
             Write-Status 'running' 'Testing provider with Hello, World!' @{ phase = 'testing'; total = 1; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
             $testResult = Join-Path $root 'runtime\provider-test-result.json'

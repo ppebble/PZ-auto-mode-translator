@@ -5,6 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { requestBatches, configuredCost } = require('./provider-profiles.cjs');
 const { unchangedNeedsTranslation, normalizeKnownTranslation } = require('./translation-quality.cjs');
+const { loadUserRules, mergeUserRules } = require('./local-controls.cjs');
 
 function arg(name, fallback) { const i = process.argv.indexOf(name); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback; }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
@@ -74,6 +75,7 @@ function applyRules(source, record, rules) {
     if (requiredAll.some(tag => !tags.has(tag))) continue;
     if (requiredAny.length && !requiredAny.some(tag => tags.has(tag))) continue;
     if (rule.kind === 'exact' && value === rule.pattern) { value = rule.replacement; applied.push(rule.id); for (const tag of rule.tags || []) tags.add(tag); }
+    if (rule.kind === 'glossary' && value.includes(rule.pattern)) { value = value.split(rule.pattern).join(rule.replacement); applied.push(rule.id); for (const tag of rule.tags || []) tags.add(tag); }
     if (rule.kind === 'regex') {
       try { const next = value.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement); if (next !== value) { value = next; applied.push(rule.id); for (const tag of rule.tags || []) tags.add(tag); } } catch {}
     }
@@ -269,11 +271,13 @@ async function main() {
   const output = arg('--output', 'runtime/translated-manifest.json');
   const translationMemoryPath = arg('--translation-memory', 'runtime/translation-memory.json');
   const rulesPath = arg('--rules', 'config/rules.example.json');
+  const userRulesPath = arg('--user-rules', '');
   const providerPath = arg('--provider', 'config/provider.local.json');
   const statusFile = arg('--status-file', '');
   const pauseFile = arg('--pause-file', '');
   const dryRun = process.argv.includes('--dry-run');
-  const manifest = readJson(manifestPath); const rules = { ...readJson(rulesPath), targetLanguage: manifest.targetLanguage };
+  const manifest = readJson(manifestPath);
+  const rules = { ...mergeUserRules(readJson(rulesPath), loadUserRules(userRulesPath)), targetLanguage: manifest.targetLanguage };
   const config = fs.existsSync(providerPath) && fs.statSync(providerPath).size > 0 ? readJson(providerPath) : {};
   const reusable = [];
   const refreshedRules = [];

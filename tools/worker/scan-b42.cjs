@@ -349,6 +349,13 @@ function main() {
         }
         for (const [key, value] of Object.entries(source.value)) {
           if (!isTranslatable(value)) continue;
+          const recordKey = `${mod.id}|${category.toLowerCase()}|${key}`;
+          const existingRecord = records.get(recordKey);
+          // Many B42 mods ship JSON and legacy Lua translations with the same
+          // keys for cross-version compatibility. Within the same effective
+          // root, keep B42 JSON authoritative and collect only legacy-only
+          // keys. A later version-specific root may still replace common data.
+          if (existingRecord && existingRecord.layout === rootInfo.layout && existingRecord.layoutVersion === rootInfo.version) continue;
           const id = `${mod.id}|${category}|${key}|${sha256(value)}`;
           const qualityRecord = { category, key, source: value };
           const reusedTarget = reusableGeneratedTarget(qualityRecord, memory.get(id));
@@ -358,7 +365,7 @@ function main() {
           const generatedTarget = generatedOverlay ? reusableGeneratedTarget(qualityRecord, overlay.target) : null;
           const status = isTranslatable(target.value[key]) ? 'existing' : (externalOverlay ? 'existing_overlay' : ((reusedTarget || generatedTarget) ? 'existing_generated' : 'pending'));
           summary[status]++;
-          records.set(`${mod.id}|${category.toLowerCase()}|${key}`, {
+          records.set(recordKey, {
             id, modId: mod.id, modPath: mod.dir, category, sourceFile,
             layout: rootInfo.layout, layoutVersion: rootInfo.version,
             key, source: value, target: isTranslatable(target.value[key]) ? target.value[key] : (reusedTarget || generatedTarget || (externalOverlay ? overlay.target : null)),
@@ -436,7 +443,7 @@ function main() {
     const stat = perMod.get(record.modId); stat.candidates++; stat[record.status]++; stat.sourceChars += Array.from(record.source).length; if (record.status === 'pending') stat.apiChars += Array.from(record.source).length; if (record.sourceKind === 'craftRecipe') stat.craftRecipes++;
   }
   for (const stat of perMod.values()) stat.large = stat.apiChars >= LARGE_MOD_API_CHARS ? 1 : 0;
-  const result = { schema: 'pzat-scan-v1', generatedAt: new Date().toISOString(), targetLanguage, gameVersion, excluded: [...excluded], included: [...included], skipModsWithTarget, translationMemory: { path: translationMemoryPath, reused: summary.reused }, summary, modSummary: [...perMod.values()].sort((a, b) => a.modId.localeCompare(b.modId)), errors, records: finalRecords };
+  const result = { schema: 'pzat-scan-v1', generatedAt: new Date().toISOString(), targetLanguage, gameVersion, excluded: [...excluded], included: [...included], skipModsWithTarget, translationMemory: { path: translationMemoryPath, reused: summary.reused }, summary, modPaths: eligibleMods.map(mod => ({ modId: mod.id, modPath: mod.dir })), modSummary: [...perMod.values()].sort((a, b) => a.modId.localeCompare(b.modId)), errors, records: finalRecords };
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, JSON.stringify(result, null, 2), 'utf8');
   if (!noCatalog) writeCatalog(catalog, result);

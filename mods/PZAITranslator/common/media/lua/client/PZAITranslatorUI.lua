@@ -4,6 +4,8 @@ require "ISUI/ISLabel"
 require "ISUI/ISScrollingListBox"
 require "ISUI/ISTextEntryBox"
 require "ISUI/ISComboBox"
+require "ISUI/ISRichTextPanel"
+require "PZAITranslatorQualityUI"
 
 PZAITranslator = PZAITranslator or {}
 local Selector = ISPanel:derive("PZAITranslatorSelector")
@@ -195,6 +197,64 @@ function PZAITranslator.openTargetSelector()
 end
 
 local TAB_INDEX = 3
+local function dashboardStatusText()
+    local state = PZAITranslator.status()
+    local info = PZAITranslator.statusInfo()
+    local labels = { idle = "Idle", needs_configuration = "Configuration", queued = "Queued", running = "Running", paused = "Paused", complete = "Complete", failed = "Failed" }
+    local parts = { labels[state] or tostring(state) }
+    local batchIndex = tonumber(info.batchIndex or "0") or 0
+    local batchCount = tonumber(info.batchCount or "0") or 0
+    local completed = tonumber(info.completed or "0") or 0
+    local total = tonumber(info.total or "0") or 0
+    local reused = tonumber(info.reused or "0") or 0
+    local failed = tonumber(info.failed or "0") or 0
+    local retries = tonumber(info.retries or "0") or 0
+    local waitSeconds = tonumber(info.waitSeconds or "0") or 0
+    local estimatedWaitSeconds = tonumber(info.estimatedWaitSeconds or "0") or 0
+    if state == "running" and batchCount > 0 then table.insert(parts, "Batch " .. tostring(math.max(1, batchIndex)) .. "/" .. tostring(batchCount)) end
+    if total > 0 then table.insert(parts, "Items " .. tostring(completed) .. "/" .. tostring(total)) end
+    if reused > 0 then table.insert(parts, "Reused " .. tostring(reused)) end
+    if failed > 0 then table.insert(parts, "Failed " .. tostring(failed)) end
+    if retries > 0 then table.insert(parts, "Retries " .. tostring(retries)) end
+    if waitSeconds > 0 then table.insert(parts, "Wait " .. tostring(waitSeconds) .. "s")
+    elseif state == "running" and estimatedWaitSeconds > 0 then table.insert(parts, "ETA " .. tostring(estimatedWaitSeconds) .. "s") end
+    if state == "failed" and info.errorCode and info.errorCode ~= "" then table.insert(parts, "HTTP " .. tostring(info.errorCode)) end
+    return table.concat(parts, " | ")
+end
+local function dashboardStatusDetailText()
+    local state = PZAITranslator.status()
+    local info = PZAITranslator.statusInfo()
+    local parts = {}
+    if info.message and info.message ~= "" then table.insert(parts, tostring(info.message)) end
+    if info.phase and info.phase ~= "" and info.phase ~= state then table.insert(parts, "Phase " .. tostring(info.phase)) end
+    if info.currentMod and info.currentMod ~= "" then table.insert(parts, "Mods " .. tostring(info.currentMod)) end
+    if state == "queued" then table.insert(parts, "Helper pending") end
+    return table.concat(parts, " | ")
+end
+local function refreshDashboard(view)
+    if not view then return end
+    if view.statusLabel then view.statusLabel:setNameWithoutMoving("Status: " .. dashboardStatusText()) end
+    if view.statusDetail then
+        view.statusDetail.text = dashboardStatusDetailText()
+        view.statusDetail:paginate()
+    end
+end
+local function startTranslation(view)
+    PZAITranslator.requestTranslation()
+    refreshDashboard(view)
+end
+local function resumeTranslation(view)
+    PZAITranslator.requestTranslation("resume")
+    refreshDashboard(view)
+end
+local function pauseTranslation(view)
+    PZAITranslator.requestPause()
+    refreshDashboard(view)
+end
+local function testConnection(view)
+    PZAITranslator.requestConnectionTest()
+    refreshDashboard(view)
+end
 local function installCharacterTab()
 if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
     PZAITranslator.charTabHooked = true
@@ -205,8 +265,30 @@ if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
             if not self.panel or not self.panel.viewList then return end
             local view = ISPanel:new(0, 8, self.width, self.height - 8); view:initialise()
             local title = ISLabel:new(16, 18, 20, "AI Translator", 1, 1, 1, 1, UIFont.Medium, true); title:initialise(); view:addChild(title)
-            local info = ISLabel:new(16, 52, 18, "Select active mods, then queue translation from Mod Options.", 0.8, 0.8, 0.8, 1, UIFont.Small, true); info:initialise(); view:addChild(info)
-            local button = ISButton:new(16, 86, 250, 30, "Manage translation targets", nil, PZAITranslator.openTargetSelector); button:initialise(); view:addChild(button)
+            local info = ISLabel:new(16, 52, 18, "Translation jobs. Provider and review tools: Mod Options.", 0.8, 0.8, 0.8, 1, UIFont.Small, true); info:initialise(); view:addChild(info)
+            local buttonX = 16
+            local buttonWidth = math.min(300, math.max(180, view.width - 32))
+            local buttonHeight = 28
+            local buttonGap = 6
+            local buttonY = 86
+            local function addDashboardButton(label, callback)
+                local dashboardButton = ISButton:new(buttonX, buttonY, buttonWidth, buttonHeight, label, view, callback)
+                dashboardButton:initialise(); view:addChild(dashboardButton)
+                buttonY = buttonY + buttonHeight + buttonGap
+            end
+            addDashboardButton("Manage translation targets", PZAITranslator.openTargetSelector)
+            addDashboardButton("Start new translation", startTranslation)
+            addDashboardButton("Resume interrupted translation", resumeTranslation)
+            addDashboardButton("Pause after current request", pauseTranslation)
+            addDashboardButton("Test API: Hello, World!", testConnection)
+            addDashboardButton("Refresh status", refreshDashboard)
+            view.statusLabel = ISLabel:new(16, buttonY + 10, 18, "Status: " .. dashboardStatusText(), 1, 1, 1, 1, UIFont.Small, true); view.statusLabel:initialise(); view:addChild(view.statusLabel)
+            local detailY = buttonY + 34
+            local detailLabel = ISLabel:new(16, detailY, 18, "Status detail:", 0.8, 0.8, 0.8, 1, UIFont.Small, true); detailLabel:initialise(); view:addChild(detailLabel)
+            view.statusDetail = ISRichTextPanel:new(16, detailY + 20, math.max(180, view.width - 32), 70)
+            view.statusDetail:initialise(); view.statusDetail:instantiate(); view.statusDetail:noBackground(); view.statusDetail.autosetheight = false; view:addChild(view.statusDetail)
+            refreshDashboard(view)
+            PZAITranslator.characterDashboard = view
             self.panel:addView("AI Translator", view)
             local list = self.panel.viewList; if #list > TAB_INDEX then local entry=table.remove(list,#list); table.insert(list,TAB_INDEX,entry) end
         end)
@@ -217,3 +299,14 @@ end
 end
 installCharacterTab()
 Events.OnGameStart.Add(installCharacterTab)
+
+local dashboardPollTicks = 0
+Events.OnTick.Add(function()
+    local view = PZAITranslator.characterDashboard
+    if not view or view.statusLabel == nil then return end
+    dashboardPollTicks = dashboardPollTicks + 1
+    if dashboardPollTicks >= 60 then
+        dashboardPollTicks = 0
+        refreshDashboard(view)
+    end
+end)

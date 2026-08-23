@@ -7,6 +7,25 @@ function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replac
 function writeUtf8(file, text) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, text, 'utf8'); }
 function escapeLuaString(value) { return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t'); }
 function legacyTableForLanguage(tableName, language) { return String(tableName || '').replace(/_?EN$/i, suffix => (suffix.startsWith('_') ? '_' : '') + language); }
+const jsonSourceCache = new Map();
+function jsonSourceFile(record) {
+  if (!record.modPath || !record.category) return null;
+  const root = record.layout === 'version' && record.layoutVersion
+    ? path.join(record.modPath, String(record.layoutVersion))
+    : (record.layout === 'common' ? path.join(record.modPath, 'common') : record.modPath);
+  return path.join(root, 'media', 'lua', 'shared', 'Translate', 'EN', record.category + '.json');
+}
+function hasMatchingJsonSource(record) {
+  if (record.sourceFormat !== 'legacy-lua') return false;
+  const file = jsonSourceFile(record);
+  if (!file || !fs.existsSync(file)) return false;
+  if (!jsonSourceCache.has(file)) {
+    try { jsonSourceCache.set(file, readJson(file)); }
+    catch { jsonSourceCache.set(file, null); }
+  }
+  const source = jsonSourceCache.get(file);
+  return Boolean(source && source[record.key] === record.source);
+}
 const input = arg('--input', 'runtime/translated-manifest.json');
 const output = arg('--output', 'runtime/generated-pack');
 const packId = arg('--pack-id', 'PZAITranslationGenerated');
@@ -21,7 +40,10 @@ for (const record of data.records.filter(r => r.status === 'validated' && typeof
   // PZ translation category file names are case-insensitive on Windows. Keep
   // one bucket for UI/ui etc. and never let an arbitrary active-mod order
   // decide a conflicting global translation key.
-  const sourceFormat = record.sourceFormat === 'legacy-lua' ? 'legacy-lua' : 'json';
+  // Manifests produced before JSON/legacy duplicate preference was fixed may
+  // mark a B42 JSON key as legacy. Promote an exact JSON twin during rebuild
+  // so review-only edits cannot make a working translation disappear.
+  const sourceFormat = record.sourceFormat === 'legacy-lua' && !hasMatchingJsonSource(record) ? 'legacy-lua' : 'json';
   const bucketId = sourceFormat + '|' + String(record.category).toLowerCase();
   if (!values.has(bucketId)) values.set(bucketId, { category: record.category, sourceFormat, legacyTable: record.legacyTable, map: new Map(), omitted: new Set() });
   const bucket = values.get(bucketId);

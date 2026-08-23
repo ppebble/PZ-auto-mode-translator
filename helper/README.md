@@ -22,7 +22,8 @@ API keys and translation results remain on each user's PC under `C:\Users\<user>
 2. In-game, save your provider, model, API key, and target language, then run **Test connection**.
 3. Open the **AI Translator** tab in the character information window, select mods, and choose **Queue translation**.
 4. Wait until Translation status shows `complete`.
-5. Enable `PZAITranslationGenerated`, return to the main menu, then enter the world again.
+5. Optionally review/correct generated results, preview a repeated phrase correction across generated translations, or scan selected mods for review-only hard-coded Lua candidates.
+6. Enable `PZAITranslationGenerated`, return to the main menu, then enter the world again.
 
 ## Stop
 
@@ -35,3 +36,5 @@ Double-click `STOP-TranslationHelper.vbs`. It stops only this helper and never c
 - `429` or `456`: the API provider has rejected the request because of a quota or rate limit. Check that provider's dashboard for the selected project and model.
 - No translation appears: enable the generated pack, return to the main menu, and enter the world again.
 - Some text can still remain English when a source mod displays a literal Lua string rather than a `Translate/EN` localization key. The Helper never edits Workshop source mods, so retrying translation cannot change that case. SaucedCarts' hard-coded `Shopping Cart` cart name is one known example; its normal tooltips and localization keys can still translate.
+- Review corrections rebuild the generated overlay and update local translation memory without another provider request. Empty or placeholder-breaking edits are rejected.
+- The hard-coded Lua scanner only reports likely UI literals and saves the user's explicit selection. It does not send those strings to a provider or patch a Workshop mod.

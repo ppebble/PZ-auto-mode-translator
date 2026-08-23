@@ -120,10 +120,34 @@ try {
   assert.deepEqual(legacy.modSummary[0] && { candidates: legacy.modSummary[0].candidates, existing: legacy.modSummary[0].existing, pending: legacy.modSummary[0].pending }, { candidates: 2, existing: 1, pending: 1 });
   const legacyRecord = legacy.records.find(record => record.key === 'IGUI_VehicleNameLegacy');
   assert.equal(legacyRecord.sourceFormat, 'legacy-lua');
+
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--dry-run'], { stdio: 'pipe' });
   const legacyPack = path.join(root, 'legacy-pack');
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'materialize-b42.cjs'), '--input', translated, '--output', legacyPack, '--allow-dry-run'], { stdio: 'pipe' });
   assert.match(fs.readFileSync(path.join(legacyPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'IG_UI_KO.txt'), 'utf8'), /IGUI_VehicleNameLegacy = "\[DRY-RUN KO\] 89 LAND ROVER Defender",/);
+
+  mod('DualFormat', { EN: { duplicate: 'JSON wins' } });
+  const dualBase = path.join(home, 'mods', 'DualFormat', 'common');
+  legacyFile(dualBase, 'EN', 'UI', { duplicate: 'Legacy duplicate', legacyOnly: 'Legacy only' });
+  fs.writeFileSync(path.join(home, 'mods', 'default.txt'), 'mod=DualFormat\n', 'utf8');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory, '--no-catalog'], { stdio: 'pipe' });
+  const dual = JSON.parse(fs.readFileSync(output, 'utf8'));
+  const duplicate = dual.records.find(record => record.key === 'duplicate');
+  assert.equal(duplicate.source, 'JSON wins');
+  assert.equal(duplicate.sourceFile, 'UI.json');
+  assert.notEqual(duplicate.sourceFormat, 'legacy-lua');
+  assert.equal(dual.records.find(record => record.key === 'legacyOnly').sourceFormat, 'legacy-lua');
+  assert.equal(dual.modSummary[0].candidates, 2);
+  const oldDualManifest = path.join(root, 'dual-old-manifest.json');
+  for (const record of dual.records) { record.status = 'validated'; record.target = record.key === 'duplicate' ? 'JSON Korean' : 'Legacy Korean'; }
+  duplicate.sourceFormat = 'legacy-lua'; duplicate.sourceFile = 'UI_EN.txt'; duplicate.legacyTable = 'UI_EN';
+  fs.writeFileSync(oldDualManifest, JSON.stringify({ ...dual, mode: 'provider', targetLanguage: 'KO' }), 'utf8');
+  const dualPack = path.join(root, 'dual-pack');
+  execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'materialize-b42.cjs'), '--input', oldDualManifest, '--output', dualPack], { stdio: 'pipe' });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dualPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'UI.json'), 'utf8')).duplicate, 'JSON Korean');
+  const dualLegacy = fs.readFileSync(path.join(dualPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'UI_KO.txt'), 'utf8');
+  assert.match(dualLegacy, /legacyOnly = "Legacy Korean"/);
+  assert.doesNotMatch(dualLegacy, /duplicate =/);
 
   const craftBase = path.join(home, 'mods', 'LegacyCraft', 'common');
   fs.mkdirSync(path.join(craftBase, 'media', 'scripts'), { recursive: true });

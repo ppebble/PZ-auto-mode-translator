@@ -26,6 +26,8 @@ $scan = Join-Path $runtime 'scan-manifest.json'
 $translated = Join-Path $runtime 'translated-manifest.json'
 $translationMemory = Join-Path $runtime 'translation-memory.json'
 $pack = Join-Path $runtime 'generated-pack'
+$userRules = Join-Path $ZomboidHome 'Lua\PZAITranslator_rules.ini'
+$reviewCatalog = Join-Path $ZomboidHome 'Lua\PZAITranslator_review.ini'
 
 function Invoke-Worker([string[]]$WorkerArgs) {
     $workerOutput = & node @WorkerArgs 2>&1
@@ -54,12 +56,14 @@ Invoke-Worker -WorkerArgs $scanArgs
 $manifest = Get-Content -LiteralPath $scan -Raw -Encoding utf8 | ConvertFrom-Json
 $total = [int]$manifest.summary.pending + [int]$manifest.summary.reused
 $reused = [int]$manifest.summary.reused
-$translationArgs = @((Join-Path $root 'tools\worker\translate-b42.cjs'), '--manifest', $scan, '--rules', $Rules, '--provider', $Provider, '--output', $translated, '--translation-memory', $translationMemory)
+$translationArgs = @((Join-Path $root 'tools\worker\translate-b42.cjs'), '--manifest', $scan, '--rules', $Rules, '--user-rules', $userRules, '--provider', $Provider, '--output', $translated, '--translation-memory', $translationMemory)
 if (-not [string]::IsNullOrWhiteSpace($StatusFile)) { $translationArgs += @('--status-file', $StatusFile) }
 if (-not [string]::IsNullOrWhiteSpace($PauseFile)) { $translationArgs += @('--pause-file', $PauseFile) }
 if ($DryRun) { $translationArgs += '--dry-run' }
 Set-Stage '2/4 Translating missing strings with the selected provider.' @{ phase = 'translating'; total = $total; completed = $reused; reused = $reused; failed = 0; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $translationArgs
+$reviewArgs = @((Join-Path $root 'tools\worker\review-b42.cjs'), '--mode', 'export', '--input', $translated, '--output', $reviewCatalog)
+Invoke-Worker -WorkerArgs $reviewArgs
 $translatedManifest = Get-Content -LiteralPath $translated -Raw -Encoding utf8 | ConvertFrom-Json
 $needsReview = [int]$translatedManifest.summary.needsReview
 $packArgs = @((Join-Path $root 'tools\worker\materialize-b42.cjs'), '--input', $translated, '--output', $pack)

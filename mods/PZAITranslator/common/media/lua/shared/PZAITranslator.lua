@@ -8,6 +8,55 @@ PZAITranslator.statusFile = "PZAITranslator_status.ini"
 PZAITranslator.pauseFile = "PZAITranslator_pause.ini"
 PZAITranslator.selectionFile = "PZAITranslator_selection.ini"
 PZAITranslator.catalogFile = "PZAITranslator_catalog.ini"
+PZAITranslator.reviewFile = "PZAITranslator_review.ini"
+PZAITranslator.reviewEditsFile = "PZAITranslator_review_edits.ini"
+PZAITranslator.rulesFile = "PZAITranslator_rules.ini"
+PZAITranslator.luaCandidatesFile = "PZAITranslator_lua_candidates.ini"
+PZAITranslator.luaSelectionFile = "PZAITranslator_lua_selection.ini"
+
+local function encodeControlValue(value)
+    return tostring(value or ""):gsub("%%", "%%25"):gsub("\r", "%%0D"):gsub("\n", "%%0A")
+end
+
+local function decodeControlValue(value)
+    return tostring(value or ""):gsub("%%(%x%x)", function(hex) return string.char(tonumber(hex, 16)) end)
+end
+
+local function loadBlocks(fileName, marker)
+    local result = {}
+    local reader = getFileReader(fileName, true)
+    if not reader then return result end
+    local current = nil
+    while true do
+        local line = reader:readLine()
+        if line == nil then break end
+        local separator = string.find(line, "=", 1, true)
+        if separator ~= nil then
+            local key = string.sub(line, 1, separator - 1)
+            local value = decodeControlValue(string.sub(line, separator + 1))
+            if key == marker then
+                current = { id = value }; table.insert(result, current)
+            elseif current ~= nil then current[key] = value end
+        end
+    end
+    reader:close()
+    return result
+end
+
+local function saveBlocks(fileName, schema, marker, records)
+    local writer = getFileWriter(fileName, true, false)
+    if not writer then return false end
+    writer:write("schema=" .. tostring(schema) .. "\n")
+    for _, record in ipairs(records or {}) do
+        writer:write(marker .. "=" .. encodeControlValue(record.id) .. "\n")
+        local fields = record.fields or {}
+        for _, key in ipairs(record.fieldOrder or {}) do
+            if fields[key] ~= nil then writer:write(key .. "=" .. encodeControlValue(fields[key]) .. "\n") end
+        end
+    end
+    writer:close()
+    return true
+end
 
 local function readStored(fileName)
     local result = {}
@@ -121,6 +170,58 @@ function PZAITranslator.saveTargetSelection(selected)
     writer:close()
     return true
 end
+
+function PZAITranslator.loadReviewRecords() return loadBlocks(PZAITranslator.reviewFile, "record") end
+function PZAITranslator.loadReviewEdits() return loadBlocks(PZAITranslator.reviewEditsFile, "edit") end
+function PZAITranslator.saveReviewEdits(edits)
+    local records = {}
+    for _, edit in ipairs(edits or {}) do table.insert(records, { id = edit.id, fields = { target = edit.target }, fieldOrder = { "target" } }) end
+    return saveBlocks(PZAITranslator.reviewEditsFile, "pzat-review-edits-v1", "edit", records)
+end
+
+function PZAITranslator.loadUserRules() return loadBlocks(PZAITranslator.rulesFile, "rule") end
+function PZAITranslator.saveUserRules(rules)
+    local records = {}
+    local order = { "kind", "enabled", "modId", "category", "pattern", "replacement", "priority", "flags" }
+    for _, rule in ipairs(rules or {}) do table.insert(records, { id = rule.id, fields = rule, fieldOrder = order }) end
+    return saveBlocks(PZAITranslator.rulesFile, "pzat-user-rules-v1", "rule", records)
+end
+
+function PZAITranslator.loadLuaCandidates() return loadBlocks(PZAITranslator.luaCandidatesFile, "candidate") end
+function PZAITranslator.loadLuaSelection()
+    local selected = {}
+    for _, record in ipairs(loadBlocks(PZAITranslator.luaSelectionFile, "candidate")) do selected[record.id] = true end
+    return selected
+end
+function PZAITranslator.saveLuaSelection(selected)
+    local records = {}
+    local candidates = {}; for _, candidate in ipairs(PZAITranslator.loadLuaCandidates()) do candidates[candidate.id] = candidate end
+    local order = { "modId", "file", "line", "source", "context", "kind", "confidence" }
+    for id, enabled in pairs(selected or {}) do
+        if enabled then local candidate = candidates[id] or {}; table.insert(records, { id = id, fields = candidate, fieldOrder = order }) end
+    end
+    return saveBlocks(PZAITranslator.luaSelectionFile, "pzat-lua-selection-v1", "candidate", records)
+end
+
+local function requestLocalAction(action)
+    local selected = PZAITranslator.loadTargetSelection()
+    if action == "scan_lua" and #selected == 0 then
+        PZAITranslator.writeStatus("failed", "Select and save at least one mod before scanning Lua candidates.", { phase = "failed", total = 0, completed = 0, reused = 0, failed = 1, retries = 0, currentMod = "" })
+        return false
+    end
+    local writer = getFileWriter(PZAITranslator.jobFile, true, false)
+    if not writer then return false end
+    writer:write("action=" .. tostring(action) .. "\n")
+    writer:write("targetLanguage=" .. tostring(PZAITranslator.loadProviderSettings().targetLanguage or "KO") .. "\n")
+    if #selected > 0 then writer:write("includeMods=" .. table.concat(selected, ",") .. "\n") end
+    writer:write("requested=1\n")
+    writer:close()
+    PZAITranslator.writeStatus("queued", "Local quality-control job queued.", { phase = "queued", total = 0, completed = 0, reused = 0, failed = 0, retries = 0, currentMod = "" })
+    return true
+end
+
+function PZAITranslator.requestApplyReview() return requestLocalAction("apply_review") end
+function PZAITranslator.requestLuaScan() return requestLocalAction("scan_lua") end
 
 function PZAITranslator.loadTargetCatalog()
     local catalog = {}
