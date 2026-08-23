@@ -124,7 +124,9 @@ async function fetchWithBackoff(label, request, config, onRetry) {
     const response = await request();
     if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt >= maxRetries) return response;
     const delay = retryDelayMs(response, attempt);
-    console.warn(`${label} HTTP ${response.status}; retrying in ${Math.ceil(delay / 1000)}s (${attempt + 1}/${maxRetries}).`);
+    // The PowerShell Helper treats stderr as a terminating worker failure.
+    // A retry notice is progress, so keep it on stdout and let the retry run.
+    console.log(`${label} HTTP ${response.status}; retrying in ${Math.ceil(delay / 1000)}s (${attempt + 1}/${maxRetries}).`);
     if (onRetry) onRetry(response.status, attempt + 1, delay);
     await response.text(); // release the response body before the next request
     await sleep(delay);
