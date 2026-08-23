@@ -1,6 +1,280 @@
 {
   "rules": [
     {
+      "id": "vehicle-name-89-lr-defender",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "\\b89 LR Defender\\b",
+      "replacement": "89 랜드로버 디펜더",
+      "priority": 400,
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-name-89-lr-wolf",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "\\b89 LR Wolf\\b",
+      "replacement": "89 랜드로버 울프",
+      "priority": 400,
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-dakar-tire",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Dakar Tire$",
+      "replacement": "Make $1 다카르 타이어",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-offroad-tire",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Offroad Tire$",
+      "replacement": "Make $1 오프로드 타이어",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-tire",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Tire$",
+      "replacement": "Make $1 타이어",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-bumper",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Bumper$",
+      "replacement": "Make $1 전면 범퍼",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-bumper",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Bumper$",
+      "replacement": "Make $1 후면 범퍼",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-door",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Door$",
+      "replacement": "Make $1 앞문",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-door",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Door$",
+      "replacement": "Make $1 뒷문",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-seat",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Seat$",
+      "replacement": "Make $1 앞좌석",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-seat",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Seat$",
+      "replacement": "Make $1 뒷좌석",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-windshield",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Windshield$",
+      "replacement": "Make $1 앞유리",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-windshield",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Windshield$",
+      "replacement": "Make $1 뒷유리",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-side-window",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Side Window$",
+      "replacement": "Make $1 앞측면 창문",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-side-window",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Side Window$",
+      "replacement": "Make $1 뒤측면 창문",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-hood",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Hood$",
+      "replacement": "Make $1 보닛",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-trunk-lid",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Trunk Lid$",
+      "replacement": "Make $1 트렁크 덮개",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-trunk-door",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Trunk Door$",
+      "replacement": "Make $1 트렁크 문",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-bullbar",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Bullbar$",
+      "replacement": "Make $1 불바",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-make-suffix",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+)$",
+      "replacement": "$1 제작",
+      "priority": 100,
+      "requiresAnyTags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
       "id": "example-mre",
       "enabled": false,
       "kind": "regex",

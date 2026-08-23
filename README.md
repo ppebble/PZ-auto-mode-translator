@@ -60,6 +60,10 @@ The selector supports text and translation-state filters plus load order, recent
 
 Existing target-language strings are always preserved and excluded from API requests. Partial translations are scanned by default, so only their missing strings are sent; the Mod Options "Skip mods that already provide the target language" setting remains available when an entire mod should be skipped deliberately.
 
+### Safe normalization rules
+
+`config\rules.example.json` can pre-translate repeated, mechanically safe phrases before an API request. Rules run in priority order and can be limited to a translation category such as `Recipes`. Vehicle recipe rules use a two-stage guard: a known vehicle-part pattern first adds the `vehicle-recipe-term` tag, then the `Make …` suffix rule is allowed to change that same recipe to `… 제작`. An unrelated recipe such as `Make Wooden Chair` remains an API candidate. Add feedback-driven patterns as a new category-scoped vehicle-part rule with that tag; do not broaden the guarded `Make` rule into a global substitution.
+
 `-Install` replaces only `$env:USERPROFILE\Zomboid\mods\PZAITranslationGenerated`. Enable that generated mod, return to the main menu, then enter the world again to reload translations.
 
 ### Localization limitation: hard-coded Lua text

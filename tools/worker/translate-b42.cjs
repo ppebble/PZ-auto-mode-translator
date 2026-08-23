@@ -61,18 +61,22 @@ function validate(source, target) {
   return null;
 }
 function applyRules(source, record, rules) {
-  let value = source; const applied = [];
+  let value = source; const applied = []; const tags = new Set();
   const scoped = rule => { const s = rule.scope || {}; return (!s.modId || s.modId === record.modId) && (!s.category || s.category === record.category); };
   for (const rule of [...(rules.rules || [])].filter(x => x.enabled && scoped(x)).sort((a,b) => (b.priority || 0) - (a.priority || 0))) {
-    if (rule.kind === 'exact' && value === rule.pattern) { value = rule.replacement; applied.push(rule.id); }
+    const requiredAll = Array.isArray(rule.requiresAllTags) ? rule.requiresAllTags : [];
+    const requiredAny = Array.isArray(rule.requiresAnyTags) ? rule.requiresAnyTags : [];
+    if (requiredAll.some(tag => !tags.has(tag))) continue;
+    if (requiredAny.length && !requiredAny.some(tag => tags.has(tag))) continue;
+    if (rule.kind === 'exact' && value === rule.pattern) { value = rule.replacement; applied.push(rule.id); for (const tag of rule.tags || []) tags.add(tag); }
     if (rule.kind === 'regex') {
-      try { const next = value.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement); if (next !== value) { value = next; applied.push(rule.id); } } catch {}
+      try { const next = value.replace(new RegExp(rule.pattern, rule.flags || 'g'), rule.replacement); if (next !== value) { value = next; applied.push(rule.id); for (const tag of rule.tags || []) tags.add(tag); } } catch {}
     }
   }
   for (const [sourceTerm, targetTerm] of Object.entries(rules.glossary || {})) {
     if (value.includes(sourceTerm)) { value = value.split(sourceTerm).join(targetTerm); applied.push('glossary:' + sourceTerm); }
   }
-  return { value, applied };
+  return { value, applied, tags: [...tags] };
 }
 function dryTranslate(source, rules) { return '[DRY-RUN ' + rules.targetLanguage + '] ' + source; }
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
@@ -314,4 +318,6 @@ async function main() {
   writeStatus(statusFile, { state: 'running', phase: 'validating', message: 'Validating translated text.', total, completed: result.summary.validated, reused: result.summary.reused, failed: result.summary.needsReview, retries, currentMod: '', apiCharacters: usage.sourceChars, requestCount: usage.requestCount, estimatedInputTokens: usage.inputTokens, estimatedOutputTokens: usage.outputTokens, estimatedCostUsd: usage.estimatedCostUsd === null ? '' : usage.estimatedCostUsd.toFixed(6) });
   console.log(JSON.stringify({ output, summary: result.summary }, null, 2));
 }
-main().catch(error => { console.error(error.stack || error); process.exit(1); });
+module.exports = { applyRules, validate };
+
+if (require.main === module) main().catch(error => { console.error(error.stack || error); process.exit(1); });
