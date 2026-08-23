@@ -231,7 +231,7 @@ async function geminiTranslate(batches, config, rules, progress, plannedWaitSeco
     await pace(batch);
     if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const prompt = 'Translate every human-readable English phrase to ' + target.name + '. Preserve vehicle model names and other proper nouns, but translate surrounding recipe verbs, vehicle parts, storage labels, descriptions, and settings. Do not return a natural-language source unchanged. Return only JSON mapping each i to text and preserve placeholders exactly. Input: ' + JSON.stringify(compactBatch(batch));
-    const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
+    const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 120) * 1000) });
     const response = await fetchWithBackoff('Gemini batch', request, config, (status, attempt, delay) => progress && progress(processed, batchProgressLabel(batch), { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Gemini HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
