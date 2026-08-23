@@ -24,7 +24,7 @@ function Selector:drawTargetItem(y, item, alt)
     local textY = y + (self.itemPadY or (item.height - self.fontHgt) / 2)
     local candidatesRight, translatedRight = self:getWidth() - 285, self:getWidth() - 185
     local apiRight, warningX = self:getWidth() - 75, self:getWidth() - 65
-    self:drawText(entry.selected and "[x]" or "[ ]", 8, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+    self:drawTextCentre(entry.selected and "[x]" or "[ ]", 24, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
     self:drawText(entry.name, 48, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
     if stat then
         self:drawTextRight(tostring(stat.candidates or 0), candidatesRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
@@ -52,7 +52,9 @@ function Selector:initialise()
     self.filterChoice:initialise(); self.filterChoice:addOption("All mods"); self.filterChoice:addOption("Needs API translation"); self.filterChoice:addOption("Has existing translation"); self.filterChoice:addOption("Large API load (20k+ chars)"); self.filterChoice:addOption("Selected mods"); self.filterChoice.selected = 1; self:addChild(self.filterChoice)
     self.sortChoice = ISComboBox:new(self.width - 280, 34, 260, 28, self, Selector.refresh)
     self.sortChoice:initialise(); self.sortChoice:addOption("Load order"); self.sortChoice:addOption("Recently updated"); self.sortChoice:addOption("Recent Steam install/update"); self.sortChoice:addOption("Most API characters"); self.sortChoice:addOption("Most API candidates"); self.sortChoice.selected = 1; self:addChild(self.sortChoice)
-    self.list = ISScrollingListBox:new(20, 76, self.width - 40, self.height - 142)
+    -- ISScrollingListBox renders its column header one row above its origin.
+    -- Leave a full row below the search/filter controls so it cannot overlap them.
+    self.list = ISScrollingListBox:new(20, 112, self.width - 40, self.height - 178)
     self.list:initialise(); self.list.itemheight = math.max(34, getTextManager():getFontHeight(UIFont.Small) + 12); self.list.itemPadY = math.floor((self.list.itemheight - self.list.fontHgt) / 2) - 1
     self.list.doDrawItem = self.drawTargetItem
     self.list:addColumn("Select", 0); self.list:addColumn("Mod", 48)
