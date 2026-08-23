@@ -192,11 +192,13 @@ function hasTargetTranslation(modDir) {
     if (!fs.existsSync(targetDir)) return false;
     return fs.readdirSync(targetDir).some(file => {
       if (!file.toLowerCase().endsWith('.json')) return false;
+      if (path.basename(file, '.json').toLowerCase() === 'mod') return false;
       const parsed = parseObject(path.join(targetDir, file));
       return !parsed.error && parsed.value && !Array.isArray(parsed.value) && typeof parsed.value === 'object'
         && Object.values(parsed.value).some(isTranslatable);
     }) || legacyTranslationFiles(targetDir, targetLanguage).some(file => {
       const parsed = parseLegacyTranslation(path.join(targetDir, file), targetLanguage);
+      if (parsed.category && parsed.category.toLowerCase() === 'mod') return false;
       return !parsed.error && Object.values(parsed.value).some(isTranslatable);
     });
   });
@@ -221,12 +223,14 @@ function effectiveTargetMap(mods) {
         const parsed = parseObject(path.join(dir, file));
         if (parsed.error || !parsed.value || Array.isArray(parsed.value)) continue;
         const category = path.basename(file, '.json').toLowerCase();
+        if (category === 'mod') continue;
         for (const [key, value] of Object.entries(parsed.value)) if (isTranslatable(value)) map.set(category + '|' + key, { target: value, modId: mod.id });
       }
       for (const file of legacyTranslationFiles(dir, targetLanguage)) {
         const parsed = parseLegacyTranslation(path.join(dir, file), targetLanguage);
         if (parsed.error || !parsed.value) continue;
         const category = parsed.category.toLowerCase();
+        if (category === 'mod') continue;
         for (const [key, value] of Object.entries(parsed.value)) if (isTranslatable(value)) map.set(category + '|' + key, { target: value, modId: mod.id });
       }
     }
@@ -282,6 +286,7 @@ function main() {
       for (const sourceFile of fs.readdirSync(enDir).filter(x => x.toLowerCase().endsWith('.json'))) {
         const sourcePath = path.join(enDir, sourceFile);
         const category = path.basename(sourceFile, '.json');
+        if (category.toLowerCase() === 'mod') continue;
         const source = parseObject(sourcePath);
         summary.files++;
         if (source.error || !source.value || Array.isArray(source.value) || typeof source.value !== 'object') {
@@ -325,6 +330,7 @@ function main() {
         const sourcePath = path.join(enDir, sourceFile);
         const source = parseLegacyTranslation(sourcePath, 'EN');
         const category = source.category;
+        if (category && category.toLowerCase() === 'mod') continue;
         summary.files++;
         if (source.error || !source.value) {
           summary.errors++;

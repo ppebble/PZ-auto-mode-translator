@@ -8,6 +8,26 @@ require "ISUI/ISComboBox"
 PZAITranslator = PZAITranslator or {}
 local Selector = ISPanel:derive("PZAITranslatorSelector")
 
+function Selector:truncateCellText(text, maxWidth)
+    if getTextManager():MeasureStringX(self.font, text) <= maxWidth then return text end
+    local suffix = "..."
+    local cut = #text
+    while cut > 0 do
+        -- Remove a whole UTF-8 character so Korean mod names cannot be split
+        -- into invalid byte sequences while making room for the ellipsis.
+        local start = cut
+        while start > 1 do
+            local byte = string.byte(text, start)
+            if byte < 0x80 or byte >= 0xC0 then break end
+            start = start - 1
+        end
+        cut = start - 1
+        local candidate = string.sub(text, 1, cut) .. suffix
+        if getTextManager():MeasureStringX(self.font, candidate) <= maxWidth then return candidate end
+    end
+    return suffix
+end
+
 function Selector:drawTargetItem(y, item, alt)
     if not item.height then item.height = self.itemheight end
     if item.height <= 0 then return y + item.height end
@@ -25,7 +45,8 @@ function Selector:drawTargetItem(y, item, alt)
     local candidatesRight, translatedRight = self:getWidth() - 285, self:getWidth() - 185
     local apiRight, warningX = self:getWidth() - 75, self:getWidth() - 65
     self:drawTextCentre(entry.selected and "[x]" or "[ ]", 24, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
-    self:drawText(entry.name, 48, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
+    local nameRight = self:getWidth() - 360
+    self:drawText(self:truncateCellText(entry.name, nameRight - 56), 48, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
     if stat then
         self:drawTextRight(tostring(stat.candidates or 0), candidatesRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)
         self:drawTextRight(tostring(entry.existing or 0), translatedRight, textY, textColor.r, textColor.g, textColor.b, textColor.a, self.font)

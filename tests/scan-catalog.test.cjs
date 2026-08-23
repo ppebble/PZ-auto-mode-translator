@@ -46,6 +46,7 @@ try {
   fs.mkdirSync(path.join(home, 'mods'), { recursive: true });
   fs.writeFileSync(path.join(home, 'mods', 'default.txt'), 'mod=MainMod\nmod=ExternalOverlay\nmod=PZAITranslationGenerated\n', 'utf8');
   mod('MainMod', { EN: { existing: 'Own target', overlay: 'External target', generated: 'Memory target', pending: 'Needs API' }, KO: { existing: 'Already Korean' } });
+  fs.writeFileSync(path.join(home, 'mods', 'MainMod', 'common', 'media', 'lua', 'shared', 'Translate', 'EN', 'Mod.json'), JSON.stringify({ name: 'Main Mod', description: 'Main Mod Description' }), 'utf8');
   mod('ExternalOverlay', { KO: { overlay: 'External Korean' } });
   mod('PZAITranslationGenerated', { KO: { generated: 'Generated Korean' } });
   const recordId = `MainMod|UI|generated|${hash('Memory target')}`;
@@ -54,6 +55,7 @@ try {
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'scan-b42.cjs'), '--zomboid-home', home, '--output', output, '--translation-memory', memory], { stdio: 'pipe' });
   const manifest = JSON.parse(fs.readFileSync(output, 'utf8'));
   assert.equal(manifest.modSummary.length, 3);
+  assert.equal(manifest.records.some(record => record.category === 'Mod'), false);
   const stat = manifest.modSummary.find(item => item.modId === 'MainMod');
   assert.deepEqual({ ...stat, updatedAt: 0 }, { modId: 'MainMod', candidates: 4, existing: 1, existing_overlay: 1, existing_generated: 1, reused: 0, pending: 1, craftRecipes: 0, sourceChars: 47, apiChars: 9, large: 0, updatedAt: 0, steamUpdatedAt: 0, metadataSource: 'local_file' });
   assert.ok(stat.updatedAt > 0);
