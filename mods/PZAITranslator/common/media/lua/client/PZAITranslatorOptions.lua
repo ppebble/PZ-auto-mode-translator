@@ -85,7 +85,7 @@ local luaButton = options:addButton("reviewLuaCandidates", "Review hardcoded Lua
 -- option. These are the final controls on this page, so they can be compacted
 -- safely after MainOptions creates their elements without patching vanilla UI.
 local function layoutActionButtons()
-    if reviewButton.element == nil or bulkButton.element == nil or luaButton.element == nil then return end
+    if reviewButton.element == nil or bulkButton.element == nil or luaButton.element == nil then return false end
     local buttons = { reviewButton, bulkButton, luaButton }
     local anchorX = reviewButton.element:getX()
     local anchorY = reviewButton.element:getY()
@@ -101,9 +101,12 @@ local function layoutActionButtons()
         element:setY(anchorY + row * rowHeight)
         element:setWidth(buttonWidth)
     end
+    return true
 end
 
-Events.OnTick.Add(function()
-    layoutActionButtons()
-end)
+local function layoutActionButtonsOnce()
+    if not layoutActionButtons() then return end
+    Events.OnTick.Remove(layoutActionButtonsOnce)
+end
+Events.OnTick.Add(layoutActionButtonsOnce)
 print("PZAITranslator: OPTIONS_REGISTERED")

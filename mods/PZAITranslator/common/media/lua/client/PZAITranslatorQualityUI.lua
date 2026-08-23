@@ -78,10 +78,11 @@ function ReviewPanel:initialise()
 end
 
 function ReviewPanel:reload()
-    self.records = PZAITranslator.loadReviewRecords(); self.edits = {}; self.byId = {}; self.page = 1
+    self.records = PZAITranslator.loadReviewRecords(); self.edits = {}; self.byId = {}; self.searchCache = {}; self.page = 1
     for _, edit in ipairs(PZAITranslator.loadReviewEdits()) do self.edits[edit.id] = edit.target end
     for _, record in ipairs(self.records) do
         if self.edits[record.id] ~= nil then record.target = self.edits[record.id]; record.edited = true end
+        record.searchText = string.lower((record.modId or "") .. " " .. (record.category or "") .. " " .. (record.key or "") .. " " .. (record.source or "") .. " " .. (record.target or ""))
         self.byId[record.id] = record
     end
     self:refresh(true)
@@ -91,15 +92,15 @@ function ReviewPanel:refresh(keepPage)
     if not self.list then return end
     if keepPage ~= true then self.page = 1 end
     self.list:clear(); local query = string.lower(self.search:getInternalText() or ""); local mode = self.filter.selected or 1
-    local matches = {}
-    for _, record in ipairs(self.records or {}) do
-        local matchesMode = mode == 1 or (mode == 2 and record.status == "needs_review") or (mode == 3 and record.method == "provider") or (mode == 4 and record.edited)
-        local visible = matchesMode
-        if visible and query ~= "" then
-            local haystack = string.lower((record.modId or "") .. " " .. (record.category or "") .. " " .. (record.key or "") .. " " .. (record.source or "") .. " " .. (record.target or ""))
-            visible = string.find(haystack, query, 1, true) ~= nil
+    local cacheKey = tostring(mode) .. "|" .. query
+    local matches = self.searchCache[cacheKey]
+    if matches == nil then
+        matches = {}
+        for _, record in ipairs(self.records or {}) do
+            local matchesMode = mode == 1 or (mode == 2 and record.status == "needs_review") or (mode == 3 and record.method == "provider") or (mode == 4 and record.edited)
+            if matchesMode and (query == "" or string.find(record.searchText, query, 1, true) ~= nil) then table.insert(matches, record) end
         end
-        if visible then table.insert(matches, record) end
+        self.searchCache[cacheKey] = matches
     end
     local pageCount = math.max(1, math.ceil(#matches / REVIEW_PAGE_SIZE))
     self.page = math.min(math.max(self.page or 1, 1), pageCount)
@@ -121,6 +122,8 @@ end
 function ReviewPanel:saveEdit()
     if not self.current then return end
     local target = self.target:getInternalText() or ""; self.edits[self.current.id] = target; self.current.target = target; self.current.edited = true
+    self.current.searchText = string.lower((self.current.modId or "") .. " " .. (self.current.category or "") .. " " .. (self.current.key or "") .. " " .. (self.current.source or "") .. " " .. target)
+    self.searchCache = {}
     local out = {}; for id, value in pairs(self.edits) do table.insert(out, { id = id, target = value }) end
     PZAITranslator.saveReviewEdits(out); self:refresh(true)
 end
@@ -163,35 +166,56 @@ function BulkPanel:initialise()
     self.modId=addEntry(self,16,150,math.floor(self.width/2)-24,28,"",true);self.category=addEntry(self,math.floor(self.width/2)+8,150,math.floor(self.width/2)-24,28,"",true)
     self.list=ISScrollingListBox:new(16,BULK_LIST_Y,self.width-32,self.height-BULK_LIST_Y-70);self.list:initialise();self.list.itemheight=30;self.list.doDrawItem=self.drawItem
     self.list:addColumn("Mod",0);self.list:addColumn("Category",212);self.list:addColumn("Current translation",317);self.list:addColumn("After replacement",math.floor(self.list.width*0.61));self:addChild(self.list)
-    addButton(self,16,self.height-42,110,"Preview",BulkPanel.preview);addButton(self,134,self.height-42,160,"Save corrections",BulkPanel.saveCorrections);addButton(self,302,self.height-42,180,"Apply saved edits",BulkPanel.applyEdits);addButton(self,self.width-126,self.height-42,110,"Close",BulkPanel.close)
+    addButton(self,16,self.height-42,90,"Preview",BulkPanel.preview)
+    addButton(self,114,self.height-42,90,"Previous",BulkPanel.previousPage)
+    addButton(self,212,self.height-42,90,"Next",BulkPanel.nextPage)
+    self.saveButton=addButton(self,310,self.height-42,180,"Save corrections",BulkPanel.saveCorrections)
+    addButton(self,498,self.height-42,180,"Apply saved edits",BulkPanel.applyEdits)
+    addButton(self,self.width-126,self.height-42,110,"Close",BulkPanel.close)
     self:reload()
 end
 function BulkPanel:reload()
-    self.records=PZAITranslator.reviewPanel and PZAITranslator.reviewPanel.records or PZAITranslator.loadReviewRecords();self.edits={};self.matches={}
+    self.records=PZAITranslator.reviewPanel and PZAITranslator.reviewPanel.records or PZAITranslator.loadReviewRecords();self.edits={};self.matches={};self.page=1;self.confirmSignature=nil
     for _,edit in ipairs(PZAITranslator.loadReviewEdits())do self.edits[edit.id]=edit.target end
     for _,record in ipairs(self.records or {})do if self.edits[record.id]~=nil then record.target=self.edits[record.id];record.edited=true end end
     self:preview()
 end
-function BulkPanel:preview()
-    if not self.list then return end
-    self.list:clear();self.matches={};local needle=self.findText:getInternalText() or "";local replacement=self.replaceText:getInternalText() or "";local modId=self.modId:getInternalText() or "";local category=self.category:getInternalText() or ""
+function BulkPanel:rebuildMatches()
+    self.matches={};local needle=self.findText:getInternalText() or "";local replacement=self.replaceText:getInternalText() or "";local modId=self.modId:getInternalText() or "";local category=self.category:getInternalText() or ""
     if needle~="" then
         for _,record in ipairs(self.records or {})do
             local target=record.target or "";local scoped=(modId=="" or record.modId==modId)and(category=="" or record.category==category)
-            if scoped and string.find(target,needle,1,true)then local match={id=record.id,modId=record.modId,category=record.category,target=target,proposed=replaceLiteral(target,needle,replacement),record=record};table.insert(self.matches,match);if #self.matches<=REVIEW_PAGE_SIZE then self.list:addItem(target,match) end end
+            if scoped and string.find(target,needle,1,true)then table.insert(self.matches,{id=record.id,modId=record.modId,category=record.category,target=target,proposed=replaceLiteral(target,needle,replacement),record=record}) end
         end
     end
-    self.titleLabel:setName("Bulk correct generated translations - "..tostring(#self.matches).." match(es)"..(#self.matches>REVIEW_PAGE_SIZE and "; first 200 shown" or ""))
+    self.signature=needle.."\t"..replacement.."\t"..modId.."\t"..category.."\t"..tostring(#self.matches)
+    self.pageCount=math.max(1,math.ceil(#self.matches/REVIEW_PAGE_SIZE));self.page=math.min(math.max(self.page or 1,1),self.pageCount)
 end
+function BulkPanel:renderPage(message)
+    if not self.list then return end
+    self.list:clear();local first=((self.page-1)*REVIEW_PAGE_SIZE)+1;local last=math.min(first+REVIEW_PAGE_SIZE-1,#self.matches)
+    for index=first,last do local match=self.matches[index];self.list:addItem(match.target,match) end
+    self.titleLabel:setName(message or ("Bulk correct generated translations - "..tostring(#self.matches).." match(es), page "..tostring(self.page).."/"..tostring(self.pageCount)))
+end
+function BulkPanel:preview()
+    self.page=1;self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:rebuildMatches();self:renderPage()
+end
+function BulkPanel:previousPage() if(self.page or 1)>1 then self.page=self.page-1;self:renderPage() end end
+function BulkPanel:nextPage() if(self.page or 1)<(self.pageCount or 1) then self.page=self.page+1;self:renderPage() end end
 function BulkPanel:saveCorrections()
-    self:preview();if #self.matches==0 then return end
-    for _,match in ipairs(self.matches)do self.edits[match.id]=match.proposed;match.record.target=match.proposed;match.record.edited=true;if PZAITranslator.reviewPanel and PZAITranslator.reviewPanel.byId[match.id]then local r=PZAITranslator.reviewPanel.byId[match.id];r.target=match.proposed;r.edited=true end end
+    self:rebuildMatches();if #self.matches==0 then self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:renderPage();return false end
+    if self.confirmSignature~=self.signature then
+        self.confirmSignature=self.signature;self.saveButton:setTitle("Confirm all "..tostring(#self.matches));self:renderPage("Confirm saving all "..tostring(#self.matches).." matching translations; click Confirm all again")
+        return false
+    end
+    for _,match in ipairs(self.matches)do self.edits[match.id]=match.proposed;match.record.target=match.proposed;match.record.edited=true;if PZAITranslator.reviewPanel and PZAITranslator.reviewPanel.byId[match.id]then local r=PZAITranslator.reviewPanel.byId[match.id];r.target=match.proposed;r.edited=true;r.searchText=string.lower((r.modId or "").." "..(r.category or "").." "..(r.key or "").." "..(r.source or "").." "..(r.target or "")) end end
     local out={};for id,target in pairs(self.edits)do table.insert(out,{id=id,target=target})end;PZAITranslator.saveReviewEdits(out)
-    self.titleLabel:setName("Bulk correct generated translations - saved "..tostring(#self.matches).." edit(s); apply when ready")
-    if PZAITranslator.reviewPanel then PZAITranslator.reviewPanel:refresh(true) end
+    self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:renderPage("Bulk correct generated translations - saved "..tostring(#self.matches).." edit(s); apply when ready")
+    if PZAITranslator.reviewPanel then PZAITranslator.reviewPanel.searchCache={};PZAITranslator.reviewPanel:refresh(true) end
+    return true
 end
 function BulkPanel:applyEdits()
-    self:saveCorrections();local hasEdits=false;for _ in pairs(self.edits)do hasEdits=true;break end
+    local hasEdits=false;for _ in pairs(self.edits)do hasEdits=true;break end
     if hasEdits then PZAITranslator.requestApplyReview() end
 end
 function BulkPanel:close() self:setVisible(false);self:removeFromUIManager();PZAITranslator.bulkPanel=nil end

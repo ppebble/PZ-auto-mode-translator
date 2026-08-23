@@ -197,6 +197,24 @@ function PZAITranslator.openTargetSelector()
 end
 
 local TAB_INDEX = 3
+local DASHBOARD_MIN_WIDTH = 620
+local DASHBOARD_MIN_HEIGHT = 500
+local DashboardPanel = ISPanel:derive("PZAITranslatorDashboardPanel")
+
+function DashboardPanel:prerender()
+    -- Match the vanilla clothing-protection view: the active content asks the
+    -- tab panel and character-info window for enough room to display itself.
+    self:setWidthAndParentWidth(math.max(self.width, DASHBOARD_MIN_WIDTH))
+    self:setHeightAndParentHeight(math.max(self.height, DASHBOARD_MIN_HEIGHT))
+    ISPanel.prerender(self)
+end
+
+function DashboardPanel:new(x, y, width, height)
+    local o = ISPanel:new(x, y, width, height)
+    setmetatable(o, self); self.__index = self
+    return o
+end
+
 local function dashboardStatusText()
     local state = PZAITranslator.status()
     local info = PZAITranslator.statusInfo()
@@ -209,6 +227,7 @@ local function dashboardStatusText()
     local reused = tonumber(info.reused or "0") or 0
     local failed = tonumber(info.failed or "0") or 0
     local retries = tonumber(info.retries or "0") or 0
+    local conflicts = tonumber(info.conflicts or "0") or 0
     local waitSeconds = tonumber(info.waitSeconds or "0") or 0
     local estimatedWaitSeconds = tonumber(info.estimatedWaitSeconds or "0") or 0
     if state == "running" and batchCount > 0 then table.insert(parts, "Batch " .. tostring(math.max(1, batchIndex)) .. "/" .. tostring(batchCount)) end
@@ -216,6 +235,7 @@ local function dashboardStatusText()
     if reused > 0 then table.insert(parts, "Reused " .. tostring(reused)) end
     if failed > 0 then table.insert(parts, "Failed " .. tostring(failed)) end
     if retries > 0 then table.insert(parts, "Retries " .. tostring(retries)) end
+    if conflicts > 0 then table.insert(parts, "Conflicts " .. tostring(conflicts)) end
     if waitSeconds > 0 then table.insert(parts, "Wait " .. tostring(waitSeconds) .. "s")
     elseif state == "running" and estimatedWaitSeconds > 0 then table.insert(parts, "ETA " .. tostring(estimatedWaitSeconds) .. "s") end
     if state == "failed" and info.errorCode and info.errorCode ~= "" then table.insert(parts, "HTTP " .. tostring(info.errorCode)) end
@@ -233,6 +253,12 @@ local function dashboardStatusDetailText()
 end
 local function refreshDashboard(view)
     if not view then return end
+    local state = PZAITranslator.status()
+    local busy = PZAITranslator.isJobBusy()
+    if view.startButton then view.startButton:setEnable(not busy) end
+    if view.resumeButton then view.resumeButton:setEnable(not busy) end
+    if view.testButton then view.testButton:setEnable(not busy) end
+    if view.pauseButton then view.pauseButton:setEnable(state == "running") end
     if view.statusLabel then view.statusLabel:setNameWithoutMoving("Status: " .. dashboardStatusText()) end
     if view.statusDetail then
         view.statusDetail.text = dashboardStatusDetailText()
@@ -263,7 +289,7 @@ if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
         local result = original(self, ...)
         local ok, err = pcall(function()
             if not self.panel or not self.panel.viewList then return end
-            local view = ISPanel:new(0, 8, self.width, self.height - 8); view:initialise()
+            local view = DashboardPanel:new(0, 8, math.max(self.width, DASHBOARD_MIN_WIDTH), math.max(self.height - 8, DASHBOARD_MIN_HEIGHT)); view:initialise()
             local title = ISLabel:new(16, 18, 20, "AI Translator", 1, 1, 1, 1, UIFont.Medium, true); title:initialise(); view:addChild(title)
             local info = ISLabel:new(16, 52, 18, "Translation jobs. Provider and review tools: Mod Options.", 0.8, 0.8, 0.8, 1, UIFont.Small, true); info:initialise(); view:addChild(info)
             local buttonX = 16
@@ -275,12 +301,13 @@ if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
                 local dashboardButton = ISButton:new(buttonX, buttonY, buttonWidth, buttonHeight, label, view, callback)
                 dashboardButton:initialise(); view:addChild(dashboardButton)
                 buttonY = buttonY + buttonHeight + buttonGap
+                return dashboardButton
             end
             addDashboardButton("Manage translation targets", PZAITranslator.openTargetSelector)
-            addDashboardButton("Start new translation", startTranslation)
-            addDashboardButton("Resume interrupted translation", resumeTranslation)
-            addDashboardButton("Pause after current request", pauseTranslation)
-            addDashboardButton("Test API: Hello, World!", testConnection)
+            view.startButton = addDashboardButton("Start new translation", startTranslation)
+            view.resumeButton = addDashboardButton("Resume interrupted translation", resumeTranslation)
+            view.pauseButton = addDashboardButton("Pause after current request", pauseTranslation)
+            view.testButton = addDashboardButton("Test API: Hello, World!", testConnection)
             addDashboardButton("Refresh status", refreshDashboard)
             view.statusLabel = ISLabel:new(16, buttonY + 10, 18, "Status: " .. dashboardStatusText(), 1, 1, 1, 1, UIFont.Small, true); view.statusLabel:initialise(); view:addChild(view.statusLabel)
             local detailY = buttonY + 34

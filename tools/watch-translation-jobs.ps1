@@ -13,6 +13,8 @@ $OutputEncoding = $utf8Console
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $lua = Join-Path $ZomboidHome 'Lua'
 $job = Join-Path $lua 'PZAITranslator_job.ini'
+$claimedJob = Join-Path $lua 'PZAITranslator_job.ini.processing'
+$incompleteJob = Join-Path $lua 'PZAITranslator_job.ini.incomplete'
 $providerIni = Join-Path $lua 'PZAITranslator_provider.ini'
 $providerJson = Join-Path $root 'runtime\provider-from-game.json'
 $status = Join-Path $lua 'PZAITranslator_status.ini'
@@ -35,7 +37,7 @@ function Read-Ini([string]$Path) {
 }
 function Write-Status([string]$State, [string]$Message, [hashtable]$Details = @{}) {
     $lines = @("state=$State", "message=$Message")
-    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','batchIndex','batchCount','waitSeconds','estimatedWaitSeconds','errorCode','apiCharacters','requestCount','estimatedInputTokens','estimatedOutputTokens','estimatedCostUsd')) {
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','batchIndex','batchCount','waitSeconds','estimatedWaitSeconds','errorCode','apiCharacters','requestCount','estimatedInputTokens','estimatedOutputTokens','estimatedCostUsd','conflicts')) {
         if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
     }
     $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
@@ -46,8 +48,8 @@ function Friendly-Error([string]$Raw) {
     if ($text -match 'DeepL HTTP 456|DeepL quota insufficient') { return 'DeepL quota is exhausted or too small for this job. Check the DeepL account usage and billing period, then retry.' }
     if ($text -match 'Gemini HTTP 429') { return 'HTTP 429: Gemini rate limit or quota. Completed batches were saved. Change the model if needed, then use Resume interrupted translation.' }
     if ($text -match 'HTTP 429') { return 'HTTP 429: Provider rate limit or quota. Wait, check provider usage, then retry.' }
+    if ($text -match 'No provider API key|API key and model are required|API key is empty') { return 'No API key is saved. Enter and apply an API key in Mod Options before queueing translation.' }
     if ($text -match 'HTTP 401|HTTP 403|API key') { return 'The provider rejected the API key or account permission. Recheck the key, selected project, and model access.' }
-    if ($text -match 'No provider API key') { return 'No API key is saved. Enter and apply an API key in Mod Options before queueing translation.' }
     if ($text -match 'node.+not recognized|node.+not found') { return 'Node.js 20 LTS or later is required by the Translation Helper. Install Node.js, then restart the Helper.' }
     if ($text -match 'timed out|Timeout') { return 'The provider request timed out. Check the network and provider status, then retry.' }
     return 'Translation failed: ' + $text
@@ -84,9 +86,38 @@ try {
     Write-Host "Watching $job (Ctrl+C to stop)."
 
     while ($true) {
-    if (-not (Test-Path -LiteralPath $job)) { Start-Sleep -Seconds $PollSeconds; continue }
+    $activeJob = $null
+    if (Test-Path -LiteralPath $claimedJob) {
+        # A previous Helper process may have stopped after claiming the request.
+        # Finish that durable claim before accepting a newer public job file.
+        $activeJob = $claimedJob
+    } elseif (Test-Path -LiteralPath $job) {
+        try {
+            # requested=1 is deliberately the final line written by the game.
+            # Do not rename a newly-created file while Lua is still filling it.
+            $pendingRequest = Read-Ini $job
+            if ($pendingRequest.requested -ne '1' -or [string]::IsNullOrWhiteSpace($pendingRequest.action)) {
+                $jobAge = [DateTime]::UtcNow - (Get-Item -LiteralPath $job).LastWriteTimeUtc
+                if ($jobAge.TotalSeconds -lt 5) {
+                    Start-Sleep -Seconds $PollSeconds
+                    continue
+                }
+                Move-Item -LiteralPath $job -Destination $incompleteJob -Force
+                Write-Warning 'Ignored and quarantined an incomplete local job file without counting it as a failed translation request.'
+                continue
+            }
+            Move-Item -LiteralPath $job -Destination $claimedJob -ErrorAction Stop
+            $activeJob = $claimedJob
+        } catch [System.IO.IOException] {
+            Start-Sleep -Seconds $PollSeconds
+            continue
+        }
+    } else {
+        Start-Sleep -Seconds $PollSeconds
+        continue
+    }
     try {
-        $request = Read-Ini $job
+        $request = Read-Ini $activeJob
         if ($request.action -notin @('translate','resume','test_connection','apply_review','scan_lua')) { throw 'Unsupported local job action.' }
         $language = $request.targetLanguage
         if ([string]::IsNullOrWhiteSpace($language)) { $language = 'KO' }
@@ -102,7 +133,7 @@ try {
             if ($LASTEXITCODE -ne 0) { throw ($candidateOutput | Out-String).Trim() }
             $candidateCount = 0
             if (Test-Path -LiteralPath $luaCandidates) { $candidateCount = (Select-String -LiteralPath $luaCandidates -Pattern '^candidate=').Count }
-            Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
+            Move-Item -LiteralPath $activeJob -Destination ($job + '.done') -Force
             Write-Status 'complete' 'Lua candidates scanned. Review and explicitly select items; no source mod or translation pack was changed.' @{ phase = 'complete'; total = $candidateCount; completed = $candidateCount; reused = 0; failed = 0; retries = 0; currentMod = '' }
             continue
         }
@@ -124,13 +155,19 @@ try {
             $exportOutput = & node (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode export --input $translatedManifest --output $reviewCatalog 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($exportOutput | Out-String).Trim() }
             $review = Get-Content -LiteralPath $reviewReport -Raw -Encoding utf8 | ConvertFrom-Json
-            Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
-            Write-Status 'complete' ("Review applied: $($review.applied) edit(s), $($review.rejected) rejected. Reload the game translation data.") @{ phase = 'complete'; total = ($review.applied + $review.rejected); completed = $review.applied; reused = 0; failed = $review.rejected; retries = 0; currentMod = '' }
+            $packReport = Get-Content -LiteralPath (Join-Path $generatedPack 'pack-report.json') -Raw -Encoding utf8 | ConvertFrom-Json
+            $conflictCount = @($packReport.conflicts).Count
+            Move-Item -LiteralPath $activeJob -Destination ($job + '.done') -Force
+            $reviewMessage = "Review applied: $($review.applied) edit(s), $($review.rejected) rejected."
+            if ($conflictCount -gt 0) { $reviewMessage += " $conflictCount conflicting generated key(s) were omitted; inspect pack-report.json." }
+            $reviewMessage += ' Reload the game translation data.'
+            Write-Status 'complete' $reviewMessage @{ phase = 'complete'; total = ($review.applied + $review.rejected); completed = $review.applied; reused = 0; failed = $review.rejected; retries = 0; currentMod = ''; conflicts = $conflictCount }
             continue
         }
         if (-not (Test-Path -LiteralPath $providerIni)) { throw 'Save provider settings in Mod Options before queuing a job.' }
         $settings = Read-Ini $providerIni
-        if ([string]::IsNullOrWhiteSpace($settings.apiKey) -or [string]::IsNullOrWhiteSpace($settings.model)) { throw 'API key and model are required.' }
+        if ([string]::IsNullOrWhiteSpace($settings.apiKey)) { throw 'No provider API key is saved.' }
+        if ([string]::IsNullOrWhiteSpace($settings.model)) { throw 'Provider model is required.' }
         $runtimeProvider = @{ provider = $settings.provider; baseUrl = $settings.baseUrl; model = $settings.model; apiKey = $settings.apiKey }
         $costEstimate = Read-CostEstimate
         if ($null -ne $costEstimate) { $runtimeProvider.costEstimate = $costEstimate }
@@ -144,7 +181,7 @@ try {
                 throw ($testOutput | Out-String).Trim()
             }
             $test = (Get-Content -LiteralPath $testResult -Raw -Encoding utf8 | ConvertFrom-Json)
-            Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
+            Move-Item -LiteralPath $activeJob -Destination ($job + '.done') -Force
             Write-Status 'complete' ("Connection test OK: " + $test.output) @{ phase = 'testing'; total = 1; completed = 1; reused = 0; failed = 0; retries = 0; currentMod = '' }
             continue
         }
@@ -155,16 +192,20 @@ try {
         $runArgs = @{ ZomboidHome = $ZomboidHome; TargetLanguage = $language; Provider = $providerJson; StatusFile = $status; PauseFile = $pause; Install = $true }
         if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $runArgs.IncludeMods = $request.includeMods }
         & (Join-Path $PSScriptRoot 'run-translation.ps1') @runArgs
-        Move-Item -LiteralPath $job -Destination ($job + '.done') -Force
+        Move-Item -LiteralPath $activeJob -Destination ($job + '.done') -Force
         $last = Read-Ini $status
-        Write-Status 'complete' 'Generated pack installed. Enable PZAITranslationGenerated, return to the main menu, then enter the world again.' @{ phase = 'complete'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = '' }
+        $conflictCount = if ($last.ContainsKey('conflicts')) { [int]$last.conflicts } else { 0 }
+        $completeMessage = 'Generated pack installed.'
+        if ($conflictCount -gt 0) { $completeMessage += " $conflictCount conflicting generated key(s) were omitted; inspect pack-report.json." }
+        $completeMessage += ' Enable PZAITranslationGenerated, return to the main menu, then enter the world again.'
+        Write-Status 'complete' $completeMessage @{ phase = 'complete'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = ''; conflicts = $conflictCount }
     } catch {
         $last = if (Test-Path -LiteralPath $status) { Read-Ini $status } else { @{} }
         $previousFailed = 0
         if ($last.ContainsKey('failed')) { $previousFailed = [int]$last.failed }
         if ($_.Exception.Message -match 'Translation paused by user') {
             Write-Status 'paused' 'Paused. Completed batches were saved; use Resume interrupted translation when ready.' @{ phase = 'paused'; total = $last.total; completed = $last.completed; reused = $last.reused; failed = $last.failed; retries = $last.retries; currentMod = $last.currentMod; batchIndex = $last.batchIndex; batchCount = $last.batchCount; waitSeconds = 0; estimatedWaitSeconds = $last.estimatedWaitSeconds; apiCharacters = $last.apiCharacters; requestCount = $last.requestCount; estimatedInputTokens = $last.estimatedInputTokens; estimatedOutputTokens = $last.estimatedOutputTokens; estimatedCostUsd = $last.estimatedCostUsd }
-            if (Test-Path -LiteralPath $job) { Move-Item -LiteralPath $job -Destination ($job + '.paused') -Force }
+            if (Test-Path -LiteralPath $activeJob) { Move-Item -LiteralPath $activeJob -Destination ($job + '.paused') -Force }
             continue
         }
         $errorCode = Get-ErrorCode $_.Exception.Message
@@ -172,7 +213,7 @@ try {
         Write-Warning $_.Exception.Message
         # A failed request must not be retried forever: it can repeatedly spend
         # provider quota or hide the original error behind a rapid status loop.
-        if (Test-Path -LiteralPath $job) { Move-Item -LiteralPath $job -Destination ($job + '.failed') -Force }
+        if (Test-Path -LiteralPath $activeJob) { Move-Item -LiteralPath $activeJob -Destination ($job + '.failed') -Force }
     }
     }
 } finally {

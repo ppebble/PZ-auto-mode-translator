@@ -37,7 +37,7 @@ function Invoke-Worker([string[]]$WorkerArgs) {
 function Set-Stage([string]$Message, [hashtable]$Details = @{}) {
     if ([string]::IsNullOrWhiteSpace($StatusFile)) { return }
     $lines = @('state=running', "message=$Message")
-    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod')) {
+    foreach ($key in @('phase','total','completed','reused','failed','retries','currentMod','conflicts')) {
         if ($Details.ContainsKey($key)) { $lines += "$key=$($Details[$key])" }
     }
     $lines += "updatedAt=$([DateTime]::UtcNow.ToString('o'))"
@@ -70,8 +70,12 @@ $packArgs = @((Join-Path $root 'tools\worker\materialize-b42.cjs'), '--input', $
 if ($DryRun) { $packArgs += '--allow-dry-run' }
 Set-Stage '3/4 Validating placeholders and generating the translation pack.' @{ phase = 'generating'; total = $total; completed = ($total - $needsReview); reused = $reused; failed = $needsReview; retries = 0; currentMod = '' }
 Invoke-Worker -WorkerArgs $packArgs
+$packReport = Get-Content -LiteralPath (Join-Path $pack 'pack-report.json') -Raw -Encoding utf8 | ConvertFrom-Json
+$conflictCount = @($packReport.conflicts).Count
 if ($Install) {
-    Set-Stage '4/4 Installing PZAITranslationGenerated.' @{ phase = 'installing'; total = $total; completed = ($total - $needsReview); reused = $reused; failed = $needsReview; retries = 0; currentMod = '' }
+    $installMessage = '4/4 Installing PZAITranslationGenerated.'
+    if ($conflictCount -gt 0) { $installMessage += " $conflictCount conflicting generated key(s) will be omitted." }
+    Set-Stage $installMessage @{ phase = 'installing'; total = $total; completed = ($total - $needsReview); reused = $reused; failed = $needsReview; retries = 0; currentMod = ''; conflicts = $conflictCount }
     $modsRoot = Join-Path $ZomboidHome 'mods'
     $destination = Join-Path $modsRoot 'PZAITranslationGenerated'
     New-Item -ItemType Directory -Force -Path $modsRoot | Out-Null
@@ -82,4 +86,5 @@ if ($Install) {
     Copy-Item -Path (Join-Path $pack '*') -Destination $destination -Recurse -Force
     Write-Host "Installed generated pack: $destination"
 }
+if ($conflictCount -gt 0) { Write-Warning "$conflictCount conflicting generated key(s) were omitted. See runtime\generated-pack\pack-report.json." }
 Write-Host "Completed. Enable PZAITranslationGenerated, return to the main menu, then enter the world again to load the translation JSON."

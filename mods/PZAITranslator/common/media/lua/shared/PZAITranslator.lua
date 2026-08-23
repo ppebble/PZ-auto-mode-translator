@@ -4,6 +4,7 @@ PZAITranslator.VERSION = "0.1.0-dev"
 PZAITranslator.state = "idle"
 PZAITranslator.storageFile = "PZAITranslator_provider.ini"
 PZAITranslator.jobFile = "PZAITranslator_job.ini"
+PZAITranslator.claimedJobFile = "PZAITranslator_job.ini.processing"
 PZAITranslator.statusFile = "PZAITranslator_status.ini"
 PZAITranslator.pauseFile = "PZAITranslator_pause.ini"
 PZAITranslator.selectionFile = "PZAITranslator_selection.ini"
@@ -118,12 +119,26 @@ function PZAITranslator.writeStatus(state, message, details)
     if not writer then return false end
     writer:write("state=" .. tostring(state or "idle") .. "\n")
     writer:write("message=" .. tostring(message or "") .. "\n")
-    for _, key in ipairs({ "phase", "total", "completed", "reused", "failed", "retries", "currentMod", "batchIndex", "batchCount" }) do
+    for _, key in ipairs({ "phase", "total", "completed", "reused", "failed", "retries", "currentMod", "batchIndex", "batchCount", "conflicts" }) do
         if details and details[key] ~= nil then writer:write(key .. "=" .. tostring(details[key]) .. "\n") end
     end
     writer:close()
     PZAITranslator.state = state or "idle"
     return true
+end
+
+local function controlFileExists(fileName)
+    -- The second argument controls file creation. A busy probe must never
+    -- create an empty job, otherwise the Helper sees it as a real request.
+    local reader = getFileReader(fileName, false)
+    if not reader then return false end
+    reader:close()
+    return true
+end
+
+function PZAITranslator.isJobBusy()
+    local state = PZAITranslator.status()
+    return state == "queued" or state == "running" or controlFileExists(PZAITranslator.jobFile) or controlFileExists(PZAITranslator.claimedJobFile)
 end
 
 function PZAITranslator.requestPause()
@@ -136,6 +151,7 @@ function PZAITranslator.requestPause()
 end
 
 function PZAITranslator.requestTranslation(action)
+    if PZAITranslator.isJobBusy() then return false end
     local writer = getFileWriter(PZAITranslator.jobFile, true, false)
     if not writer then return false end
     writer:write("action=" .. (action == "resume" and "resume" or "translate") .. "\n")
@@ -209,6 +225,7 @@ local function requestLocalAction(action)
         PZAITranslator.writeStatus("failed", "Select and save at least one mod before scanning Lua candidates.", { phase = "failed", total = 0, completed = 0, reused = 0, failed = 1, retries = 0, currentMod = "" })
         return false
     end
+    if PZAITranslator.isJobBusy() then return false end
     local writer = getFileWriter(PZAITranslator.jobFile, true, false)
     if not writer then return false end
     writer:write("action=" .. tostring(action) .. "\n")
@@ -253,6 +270,7 @@ function PZAITranslator.loadTargetCatalog()
 end
 
 function PZAITranslator.requestConnectionTest()
+    if PZAITranslator.isJobBusy() then return false end
     local writer = getFileWriter(PZAITranslator.jobFile, true, false)
     if not writer then return false end
     writer:write("action=test_connection\n")
