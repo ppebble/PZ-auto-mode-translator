@@ -2,7 +2,11 @@
 'use strict';
 
 const PROFILES = Object.freeze({
-  gemini: Object.freeze({ maxItems: 100, maxChars: 8000 }),
+  // Gemini free-tier translation jobs commonly exhaust RPD long before RPM or
+  // TPM.  A 16k-character response remains comfortably below its context
+  // window while halving request pressure for a mod split only by the old
+  // 100-item cap.
+  gemini: Object.freeze({ maxItems: 200, maxChars: 16000 }),
   deepl: Object.freeze({ maxItems: 100, maxChars: 10000 }),
   openai: Object.freeze({ maxItems: 100, maxChars: 8000 }),
   deepseek: Object.freeze({ maxItems: 100, maxChars: 8000 }),

@@ -106,7 +106,7 @@ The Helper is local middleware: it sends only unresolved strings using the API k
 
 ### Fixed request sizing
 
-Request size is selected by the Helper, not an in-game setting. It keeps the existing 70-second request/mod pacing and uses conservative source-text limits: Gemini 100 strings / 8,000 characters, DeepL 100 / 10,000, OpenAI and DeepSeek 100 / 8,000, Claude 50 / 6,000, Yandex 100 / 8,000, and unknown OpenAI-compatible endpoints 20 / 3,000. Batches never mix mods. These limits reduce request count without overriding an account's quota; a 429 can still mean an exhausted provider quota.
+Request size is selected by the Helper, not an in-game setting. It keeps the existing 70-second request/mod pacing and uses source-text limits: Gemini 200 strings / 16,000 characters, DeepL 100 / 10,000, OpenAI and DeepSeek 100 / 8,000, Claude 50 / 6,000, Yandex 100 / 8,000, and unknown OpenAI-compatible endpoints 20 / 3,000. Gemini is deliberately larger because free-tier translation runs tend to exhaust daily requests (RPD) before per-minute requests or tokens; this reduces RPD pressure without increasing the request rate. Batches never mix mods. These limits reduce request count without overriding an account's quota; a 429 can still mean an exhausted provider quota.
 
 To fetch account-visible model IDs into the game-side model list:
 
