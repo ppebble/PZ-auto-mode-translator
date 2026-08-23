@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { requestBatches, configuredCost } = require('./provider-profiles.cjs');
-const { unchangedNeedsTranslation } = require('./translation-quality.cjs');
+const { unchangedNeedsTranslation, normalizeKnownTranslation } = require('./translation-quality.cjs');
 
 function arg(name, fallback) { const i = process.argv.indexOf(name); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback; }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
@@ -275,7 +275,14 @@ async function main() {
   const dryRun = process.argv.includes('--dry-run');
   const manifest = readJson(manifestPath); const rules = { ...readJson(rulesPath), targetLanguage: manifest.targetLanguage };
   const config = fs.existsSync(providerPath) && fs.statSync(providerPath).size > 0 ? readJson(providerPath) : {};
-  const reusable = manifest.records.filter(r => r.status === 'existing_generated' && typeof r.target === 'string');
+  const reusable = [];
+  const refreshedRules = [];
+  for (const record of manifest.records.filter(r => r.status === 'existing_generated' && typeof r.target === 'string')) {
+    const ruleResult = applyRules(record.source, record, rules);
+    const error = ruleResult.value === record.source ? null : validate(record.source, ruleResult.value, record);
+    if (ruleResult.value !== record.source && !error) refreshedRules.push({ ...record, target: ruleResult.value, status: 'validated', method: 'rule', appliedRules: ruleResult.applied });
+    else reusable.push(record);
+  }
   const pending = manifest.records.filter(r => r.status === 'pending'); const direct = []; const unresolved = [];
   for (const record of pending) {
     const ruleResult = applyRules(record.source, record, rules);
@@ -292,9 +299,9 @@ async function main() {
   const providerBatches = requestBatches(providerRecords, providerName);
   const plannedWaitSeconds = estimatedWaitSeconds(providerBatches, pacingSettings(providerName));
   const usage = configuredCost(providerRecords, providerName, config.costEstimate || {});
-  const baseCompleted = reusable.length + direct.filter(r => r.status === 'validated').length;
+  const baseCompleted = reusable.length + refreshedRules.length + direct.filter(r => r.status === 'validated').length;
   const baseFailed = unresolved.length;
-  const total = reusable.length + pending.length;
+  const total = reusable.length + refreshedRules.length + pending.length;
   let retries = 0;
   let currentBatchIndex = providerBatches.length > 0 ? 1 : 0;
   const updateProgress = (processed, currentMod, details = {}) => {
@@ -313,8 +320,8 @@ async function main() {
   };
   updateProgress(0, providerRecords[0] && providerRecords[0].modId, { phase: 'estimating', message: `Plan: ${usage.sourceChars} API characters, ${usage.requestCount} request(s), about ${usage.inputTokens} input tokens${usage.estimatedCostUsd === null ? '; cost estimate unavailable until account rates are configured.' : `, about $${usage.estimatedCostUsd.toFixed(4)}`}.`, estimatedWaitSeconds: plannedWaitSeconds });
   const buildResult = map => {
-    const translated = [...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
-      const target = map[r.id]; const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target, r);
+    const translated = [...refreshedRules, ...direct.filter(r => r.status === 'validated'), ...providerRecords.map(r => {
+      const target = normalizeKnownTranslation(r, map[r.id]); const error = typeof target !== 'string' ? 'missing provider result' : validate(r.source, target, r);
       return { ...r, target: typeof target === 'string' ? target : null, status: error ? 'needs_review' : 'validated', method: 'provider', reason: error };
     }).map(r => ({ ...r, method: dryRun ? 'dry-run' : r.method })), ...unresolved];
     const reused = reusable.map(r => ({ ...r, status: 'validated', method: 'translation-memory' }));

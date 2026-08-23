@@ -261,6 +261,132 @@
       }
     },
     {
+      "id": "vehicle-recipe-metal-roof",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Metal Roof$",
+      "replacement": "Make $1 금속 지붕",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-cowl-hood",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Cowl Hood$",
+      "replacement": "Make $1 카울 보닛",
+      "priority": 310,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-reinforced-front-bumper",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Reinforced Front Bumper$",
+      "replacement": "Make $1 강화 전면 범퍼",
+      "priority": 310,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-reinforced-rear-bumper",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Reinforced Rear Bumper$",
+      "replacement": "Make $1 강화 후면 범퍼",
+      "priority": 310,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rollbar",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rollbar$",
+      "replacement": "Make $1 롤바",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-window-armor",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Window Armor$",
+      "replacement": "Make $1 전면 창문 방어판",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-window-armor",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Window Armor$",
+      "replacement": "Make $1 후면 창문 방어판",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-front-windshield-armor",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Front Windshield Armor$",
+      "replacement": "Make $1 전면 유리 방어판",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
+      "id": "vehicle-recipe-rear-windshield-armor",
+      "enabled": true,
+      "kind": "regex",
+      "pattern": "^Make\\s+(.+?)\\s+Rear Windshield Armor$",
+      "replacement": "Make $1 후면 유리 방어판",
+      "priority": 300,
+      "tags": [
+        "vehicle-recipe-term"
+      ],
+      "scope": {
+        "category": "Recipes"
+      }
+    },
+    {
       "id": "vehicle-recipe-make-suffix",
       "enabled": true,
       "kind": "regex",
