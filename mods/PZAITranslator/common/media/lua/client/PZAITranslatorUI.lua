@@ -329,11 +329,11 @@ Events.OnGameStart.Add(installCharacterTab)
 
 local dashboardPollTicks = 0
 Events.OnTick.Add(function()
-    local view = PZAITranslator.characterDashboard
-    if not view or view.statusLabel == nil then return end
     dashboardPollTicks = dashboardPollTicks + 1
     if dashboardPollTicks >= 60 then
         dashboardPollTicks = 0
-        refreshDashboard(view)
+        local view = PZAITranslator.characterDashboard
+        if view and view.statusLabel ~= nil then refreshDashboard(view) end
+        if PZAITranslator.refreshQualityActionStates then PZAITranslator.refreshQualityActionStates() end
     end
 end)

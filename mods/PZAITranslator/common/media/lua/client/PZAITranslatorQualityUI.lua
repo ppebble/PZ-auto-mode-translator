@@ -40,6 +40,11 @@ local function addEntry(panel, x, y, w, h, value, enabled)
     local entry = ISTextEntryBox:new(value or "", x, y, w, h); entry:initialise(); entry:instantiate(); entry:setEditable(enabled ~= false); panel:addChild(entry); return entry
 end
 
+local function hasEntries(values)
+    for _ in pairs(values or {}) do return true end
+    return false
+end
+
 local ReviewPanel = ISPanel:derive("PZAITranslatorReviewPanel")
 
 function ReviewPanel:drawItem(y, item, alt)
@@ -68,11 +73,11 @@ function ReviewPanel:initialise()
     self.source = addEntry(self, 16, formY + 22, self.width - 32, 42, "", false); self.source:setMultipleLine(true); self.source:setMaxLines(2)
     local targetLabel = ISLabel:new(16, formY + 70, 18, "Reviewed target", 1, 1, 1, 1, UIFont.Small, true); targetLabel:initialise(); self:addChild(targetLabel)
     self.target = addEntry(self, 16, formY + 92, self.width - 32, 52, "", true); self.target:setMultipleLine(true); self.target:setMaxLines(3)
-    addButton(self, 16, self.height - 42, 150, "Save edit", ReviewPanel.saveEdit)
-    addButton(self, 174, self.height - 42, 190, "Apply saved edits", ReviewPanel.applyEdits)
+    self.saveButton = addButton(self, 16, self.height - 42, 150, "Save edit", ReviewPanel.saveEdit)
+    self.applyButton = addButton(self, 174, self.height - 42, 190, "Apply saved edits", ReviewPanel.applyEdits)
     addButton(self, 372, self.height - 42, 110, "Bulk replace", ReviewPanel.openBulk)
-    addButton(self, 490, self.height - 42, 90, "Previous", ReviewPanel.previousPage)
-    addButton(self, 588, self.height - 42, 90, "Next", ReviewPanel.nextPage)
+    self.previousButton = addButton(self, 490, self.height - 42, 90, "Previous", ReviewPanel.previousPage)
+    self.nextButton = addButton(self, 588, self.height - 42, 90, "Next", ReviewPanel.nextPage)
     addButton(self, self.width - 126, self.height - 42, 110, "Close", ReviewPanel.close)
     self:reload()
 end
@@ -85,7 +90,7 @@ function ReviewPanel:reload()
         record.searchText = string.lower((record.modId or "") .. " " .. (record.category or "") .. " " .. (record.key or "") .. " " .. (record.source or "") .. " " .. (record.target or ""))
         self.byId[record.id] = record
     end
-    self:refresh(true)
+    self:refresh(true); self:updateActionState()
 end
 
 function ReviewPanel:refresh(keepPage)
@@ -109,6 +114,7 @@ function ReviewPanel:refresh(keepPage)
     for index = first, last do local record = matches[index]; self.list:addItem(record.source, record) end
     self.matchCount = #matches; self.pageCount = pageCount
     self.titleLabel:setName("Generated translation review - " .. tostring(#matches) .. " result(s), page " .. tostring(self.page) .. "/" .. tostring(pageCount))
+    self:updateActionState()
 end
 
 function ReviewPanel:previousPage() if (self.page or 1) > 1 then self.page = self.page - 1; self:refresh(true) end end
@@ -117,6 +123,15 @@ function ReviewPanel:nextPage() if (self.page or 1) < (self.pageCount or 1) then
 function ReviewPanel:loadSelected()
     local item = self.list.items[self.list.selected]; self.current = item and item.item or nil
     self.source:setText(self.current and self.current.source or ""); self.target:setText(self.current and self.current.target or "")
+    self:updateActionState()
+end
+
+function ReviewPanel:updateActionState(busy)
+    if busy == nil then busy = PZAITranslator.isJobBusy() end
+    if self.saveButton then self.saveButton:setEnable(self.current ~= nil) end
+    if self.applyButton then self.applyButton:setEnable(hasEntries(self.edits) and not busy) end
+    if self.previousButton then self.previousButton:setEnable((self.page or 1) > 1) end
+    if self.nextButton then self.nextButton:setEnable((self.page or 1) < (self.pageCount or 1)) end
 end
 
 function ReviewPanel:saveEdit()
@@ -125,9 +140,9 @@ function ReviewPanel:saveEdit()
     self.current.searchText = string.lower((self.current.modId or "") .. " " .. (self.current.category or "") .. " " .. (self.current.key or "") .. " " .. (self.current.source or "") .. " " .. target)
     self.searchCache = {}
     local out = {}; for id, value in pairs(self.edits) do table.insert(out, { id = id, target = value }) end
-    PZAITranslator.saveReviewEdits(out); self:refresh(true)
+    PZAITranslator.saveReviewEdits(out); self:refresh(true); self:updateActionState()
 end
-function ReviewPanel:applyEdits() self:saveEdit(); PZAITranslator.requestApplyReview() end
+function ReviewPanel:applyEdits() self:saveEdit(); PZAITranslator.requestApplyReview(); self:updateActionState() end
 function ReviewPanel:openBulk() if PZAITranslator.openBulkCorrectionPanel then PZAITranslator.openBulkCorrectionPanel(self.current) end end
 function ReviewPanel:close() self:setVisible(false); self:removeFromUIManager(); PZAITranslator.reviewPanel = nil end
 function ReviewPanel:new(x,y,w,h) local o=ISPanel:new(x,y,w,h); setmetatable(o,self); self.__index=self; o.backgroundColor={r=0,g=0,b=0,a=0.94}; o.borderColor={r=1,g=1,b=1,a=0.35}; o.moveWithMouse=true; return o end
@@ -167,10 +182,10 @@ function BulkPanel:initialise()
     self.list=ISScrollingListBox:new(16,BULK_LIST_Y,self.width-32,self.height-BULK_LIST_Y-70);self.list:initialise();self.list.itemheight=30;self.list.doDrawItem=self.drawItem
     self.list:addColumn("Mod",0);self.list:addColumn("Category",212);self.list:addColumn("Current translation",317);self.list:addColumn("After replacement",math.floor(self.list.width*0.61));self:addChild(self.list)
     addButton(self,16,self.height-42,90,"Preview",BulkPanel.preview)
-    addButton(self,114,self.height-42,90,"Previous",BulkPanel.previousPage)
-    addButton(self,212,self.height-42,90,"Next",BulkPanel.nextPage)
+    self.previousButton=addButton(self,114,self.height-42,90,"Previous",BulkPanel.previousPage)
+    self.nextButton=addButton(self,212,self.height-42,90,"Next",BulkPanel.nextPage)
     self.saveButton=addButton(self,310,self.height-42,180,"Save corrections",BulkPanel.saveCorrections)
-    addButton(self,498,self.height-42,180,"Apply saved edits",BulkPanel.applyEdits)
+    self.applyButton=addButton(self,498,self.height-42,180,"Apply saved edits",BulkPanel.applyEdits)
     addButton(self,self.width-126,self.height-42,110,"Close",BulkPanel.close)
     self:reload()
 end
@@ -198,12 +213,12 @@ function BulkPanel:renderPage(message)
     self.titleLabel:setName(message or ("Bulk correct generated translations - "..tostring(#self.matches).." match(es), page "..tostring(self.page).."/"..tostring(self.pageCount)))
 end
 function BulkPanel:preview()
-    self.page=1;self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:rebuildMatches();self:renderPage()
+    self.page=1;self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:rebuildMatches();self:renderPage();self:updateActionState()
 end
-function BulkPanel:previousPage() if(self.page or 1)>1 then self.page=self.page-1;self:renderPage() end end
-function BulkPanel:nextPage() if(self.page or 1)<(self.pageCount or 1) then self.page=self.page+1;self:renderPage() end end
+function BulkPanel:previousPage() if(self.page or 1)>1 then self.page=self.page-1;self:renderPage();self:updateActionState() end end
+function BulkPanel:nextPage() if(self.page or 1)<(self.pageCount or 1) then self.page=self.page+1;self:renderPage();self:updateActionState() end end
 function BulkPanel:saveCorrections()
-    self:rebuildMatches();if #self.matches==0 then self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:renderPage();return false end
+    self:rebuildMatches();if #self.matches==0 then self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:renderPage();self:updateActionState();return false end
     if self.confirmSignature~=self.signature then
         self.confirmSignature=self.signature;self.saveButton:setTitle("Confirm all "..tostring(#self.matches));self:renderPage("Confirm saving all "..tostring(#self.matches).." matching translations; click Confirm all again")
         return false
@@ -211,12 +226,20 @@ function BulkPanel:saveCorrections()
     for _,match in ipairs(self.matches)do self.edits[match.id]=match.proposed;match.record.target=match.proposed;match.record.edited=true;if PZAITranslator.reviewPanel and PZAITranslator.reviewPanel.byId[match.id]then local r=PZAITranslator.reviewPanel.byId[match.id];r.target=match.proposed;r.edited=true;r.searchText=string.lower((r.modId or "").." "..(r.category or "").." "..(r.key or "").." "..(r.source or "").." "..(r.target or "")) end end
     local out={};for id,target in pairs(self.edits)do table.insert(out,{id=id,target=target})end;PZAITranslator.saveReviewEdits(out)
     self.confirmSignature=nil;self.saveButton:setTitle("Save corrections");self:renderPage("Bulk correct generated translations - saved "..tostring(#self.matches).." edit(s); apply when ready")
-    if PZAITranslator.reviewPanel then PZAITranslator.reviewPanel.searchCache={};PZAITranslator.reviewPanel:refresh(true) end
+    if PZAITranslator.reviewPanel then PZAITranslator.reviewPanel.searchCache={};PZAITranslator.reviewPanel:refresh(true);PZAITranslator.reviewPanel:updateActionState() end
+    self:updateActionState()
     return true
+end
+function BulkPanel:updateActionState(busy)
+    if busy == nil then busy = PZAITranslator.isJobBusy() end
+    if self.saveButton then self.saveButton:setEnable(#(self.matches or {}) > 0) end
+    if self.applyButton then self.applyButton:setEnable(hasEntries(self.edits) and not busy) end
+    if self.previousButton then self.previousButton:setEnable((self.page or 1) > 1) end
+    if self.nextButton then self.nextButton:setEnable((self.page or 1) < (self.pageCount or 1)) end
 end
 function BulkPanel:applyEdits()
     local hasEdits=false;for _ in pairs(self.edits)do hasEdits=true;break end
-    if hasEdits then PZAITranslator.requestApplyReview() end
+    if hasEdits then PZAITranslator.requestApplyReview() end;self:updateActionState()
 end
 function BulkPanel:close() self:setVisible(false);self:removeFromUIManager();PZAITranslator.bulkPanel=nil end
 function BulkPanel:new(x,y,w,h)local o=ISPanel:new(x,y,w,h);setmetatable(o,self);self.__index=self;o.backgroundColor={r=0,g=0,b=0,a=0.94};o.borderColor={r=1,g=1,b=1,a=0.35};o.moveWithMouse=true;return o end
@@ -234,14 +257,25 @@ function LuaPanel:initialise()
     addButton(self,610,68,100,"Search",LuaPanel.refresh)
     self.list=ISScrollingListBox:new(16,LUA_LIST_Y,self.width-32,self.height-LUA_LIST_Y-70);self.list:initialise();self.list.itemheight=30;self.list.doDrawItem=self.drawItem;self.list:addColumn("Select",0);self.list:addColumn("Mod",40);self.list:addColumn("Type",192);self.list:addColumn("File",314);self.list:addColumn("Literal",602)
     self.list.onMouseDown=function(list,x,y) ISScrollingListBox.onMouseDown(list,x,y);local item=list.items[list.selected];if item then item.item.selected=not item.item.selected;self.selected[item.item.id]=item.item.selected end end;self:addChild(self.list)
-    addButton(self,16,self.height-42,170,"Scan selected mods",LuaPanel.scan);addButton(self,194,self.height-42,150,"Save selection",LuaPanel.save);addButton(self,352,self.height-42,110,"Refresh",LuaPanel.reload);addButton(self,self.width-126,self.height-42,110,"Close",LuaPanel.close);self:reload()
+    self.scanButton=addButton(self,16,self.height-42,170,"Scan selected mods",LuaPanel.scan);addButton(self,194,self.height-42,150,"Save selection",LuaPanel.save);addButton(self,352,self.height-42,110,"Refresh",LuaPanel.reload);addButton(self,self.width-126,self.height-42,110,"Close",LuaPanel.close);self:reload()
 end
-function LuaPanel:reload() self.records=PZAITranslator.loadLuaCandidates();self.selected=PZAITranslator.loadLuaSelection();for _,r in ipairs(self.records)do r.selected=self.selected[r.id] or false end;self:refresh() end
+function LuaPanel:reload() self.records=PZAITranslator.loadLuaCandidates();self.selected=PZAITranslator.loadLuaSelection();for _,r in ipairs(self.records)do r.selected=self.selected[r.id] or false end;self:refresh();self:updateActionState() end
 function LuaPanel:refresh() self.list:clear();local q=string.lower(self.search:getInternalText() or "");local mode=self.filter and self.filter.selected or 1;for _,r in ipairs(self.records or {})do local h=string.lower((r.modId or "").." "..(r.file or "").." "..(r.source or ""));local matchesMode=mode==1 or(mode==2 and r.confidence=="high")or(mode==3 and r.kind=="display-assignment")or(mode==4 and r.selected);if matchesMode and(q=="" or string.find(h,q,1,true))then self.list:addItem(r.source,r)end end end
-function LuaPanel:scan() PZAITranslator.requestLuaScan() end
+function LuaPanel:updateActionState(busy)
+    if busy == nil then busy = PZAITranslator.isJobBusy() end
+    if self.scanButton then self.scanButton:setEnable(#PZAITranslator.loadTargetSelection() > 0 and not busy) end
+end
+function LuaPanel:scan() PZAITranslator.requestLuaScan();self:updateActionState() end
 function LuaPanel:save() PZAITranslator.saveLuaSelection(self.selected) end
 function LuaPanel:close() self:save();self:setVisible(false);self:removeFromUIManager();PZAITranslator.luaPanel=nil end
 function LuaPanel:new(x,y,w,h)local o=ISPanel:new(x,y,w,h);setmetatable(o,self);self.__index=self;o.backgroundColor={r=0,g=0,b=0,a=0.94};o.borderColor={r=1,g=1,b=1,a=0.35};o.moveWithMouse=true;return o end
+
+function PZAITranslator.refreshQualityActionStates()
+    local busy = PZAITranslator.isJobBusy()
+    if PZAITranslator.reviewPanel then PZAITranslator.reviewPanel:updateActionState(busy) end
+    if PZAITranslator.bulkPanel then PZAITranslator.bulkPanel:updateActionState(busy) end
+    if PZAITranslator.luaPanel then PZAITranslator.luaPanel:updateActionState(busy) end
+end
 
 local function openPanel(field, class, width, height)
     if PZAITranslator[field] then PZAITranslator[field]:bringToTop();return end

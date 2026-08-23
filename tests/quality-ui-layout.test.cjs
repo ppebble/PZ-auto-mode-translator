@@ -20,6 +20,11 @@ assert.match(source, /function BulkPanel:previousPage\(\)/, 'bulk correction pre
 assert.match(source, /function BulkPanel:nextPage\(\)/, 'bulk correction previews must expose every result page');
 assert.match(source, /function BulkPanel:saveCorrections\(\)/, 'bulk corrections must save explicit review edits');
 assert.match(source, /Confirm all /, 'bulk corrections must require an explicit all-match confirmation');
+assert.match(source, /self\.applyButton:setEnable\(hasEntries\(self\.edits\) and not busy\)/, 'review and bulk apply buttons must disable without saved edits or while another job is active');
+assert.match(source, /self\.scanButton:setEnable\(#PZAITranslator\.loadTargetSelection\(\) > 0 and not busy\)/, 'Lua scan must disable without selected mods or while another job is active');
+assert.match(source, /local busy = PZAITranslator\.isJobBusy\(\)/, 'quality panels must share one busy read per status-poll cycle');
+assert.match(source, /self\.previousButton:setEnable\(\(self\.page or 1\) > 1\)/, 'quality pagination must disable Previous on the first page');
+assert.match(source, /self\.nextButton:setEnable\(\(self\.page or 1\) < \(self\.pageCount or 1\)\)/, 'quality pagination must disable Next on the last page');
 assert.doesNotMatch(source, /function BulkPanel:applyEdits\(\)[\s\S]{0,120}saveCorrections/, 'apply must use already-confirmed saved edits instead of silently saving a fresh full match set');
 assert.match(source, /string\.find\(value, needle, start, true\)/, 'bulk corrections must use literal text matching, not regex');
 assert.doesNotMatch(source, /next\(self\.edits\)/, 'Kahlua does not expose the standard Lua next function');
@@ -54,6 +59,7 @@ assert.match(characterSource, /Status detail:/, 'character info dashboard must s
 assert.match(characterSource, /local DASHBOARD_MIN_WIDTH = 620/, 'AI Translator tab must request a protection-style wide information window');
 assert.match(characterSource, /self:setWidthAndParentWidth\(math\.max\(self\.width, DASHBOARD_MIN_WIDTH\)\)/, 'AI Translator tab must expand its parent information window');
 assert.match(characterSource, /view\.startButton:setEnable\(not busy\)/, 'job-start controls must be disabled while a job is queued or running');
+assert.match(characterSource, /PZAITranslator\.refreshQualityActionStates\(\)/, 'the existing status poll must also refresh quality-action availability');
 assert.match(characterSource, /Conflicts /, 'generated-pack conflicts must be visible on the in-game dashboard');
 assert.match(characterSource, /local buttonX = 16[\s\S]*local buttonWidth = math\.min\(300, math\.max\(180, view\.width - 32\)\)[\s\S]*local buttonGap = 6/, 'character info dashboard must use a single responsive narrow-safe button column');
 assert.doesNotMatch(characterSource, /ISButton:new\(278,|ISButton:new\(422,/, 'character info dashboard buttons must not use additional columns');
