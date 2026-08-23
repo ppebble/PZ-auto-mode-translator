@@ -19,11 +19,14 @@ function providerBatchProfile(provider) { return PROFILES[provider] || PROFILES[
 function recordChars(record) { return Array.from(record.source || '').length; }
 function requestBatches(records, provider) {
   const { maxItems, maxChars } = providerBatchProfile(provider);
+  const isolateMods = provider !== 'gemini';
   const batches = []; let batch = []; let chars = 0;
   for (const record of records) {
     const length = recordChars(record);
-    // Never combine mods: progress, pause, and resume remain understandable.
-    if (batch.length && (batch[0].modId !== record.modId || batch.length >= maxItems || chars + length > maxChars)) {
+    // Gemini's free tier can have a much smaller RPD than RPM/TPM. Combine
+    // queued mods there to conserve daily requests; record IDs still retain
+    // their mod identity for checkpointing and generated-overlay output.
+    if (batch.length && ((isolateMods && batch[0].modId !== record.modId) || batch.length >= maxItems || chars + length > maxChars)) {
       batches.push(batch); batch = []; chars = 0;
     }
     batch.push(record); chars += length;

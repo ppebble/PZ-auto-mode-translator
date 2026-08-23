@@ -91,6 +91,11 @@ function pacingSettings(provider) {
   const defaultInterval = 70000;
   return { intervalMs: defaultInterval, modPauseMs: defaultInterval };
 }
+function batchProgressLabel(batch) {
+  const mods = [...new Set((batch || []).map(record => record.modId).filter(Boolean))];
+  if (mods.length <= 1) return mods[0] || '';
+  return `${mods[0]} + ${mods.length - 1} queued mod(s)`;
+}
 function estimatedWaitSeconds(batches, pacing) {
   let ms = 0;
   for (let index = 1; index < batches.length; index++) ms += Math.max(pacing.intervalMs, batches[index - 1][0].modId !== batches[index][0].modId ? pacing.modPauseMs : 0);
@@ -99,13 +104,13 @@ function estimatedWaitSeconds(batches, pacing) {
 function createPacer(pacing, progress, plannedWaitSeconds, pauseFile) {
   let lastRequestAt = 0; let lastMod = null;
   return async batch => {
-    if (pauseRequested(pauseFile)) { progress(null, batch[0].modId, { phase: 'paused', message: 'Paused before the next provider request.' }); throw new Error('Translation paused by user. Completed batches were saved.'); }
+    if (pauseRequested(pauseFile)) { progress(null, batchProgressLabel(batch), { phase: 'paused', message: 'Paused before the next provider request.' }); throw new Error('Translation paused by user. Completed batches were saved.'); }
     if (lastRequestAt > 0) {
       const minimum = lastMod !== batch[0].modId ? Math.max(pacing.intervalMs, pacing.modPauseMs) : pacing.intervalMs;
       const waitMs = Math.max(0, lastRequestAt + minimum - Date.now());
       if (waitMs > 0) {
-        progress(null, batch[0].modId, { phase: 'waiting', waitSeconds: Math.ceil(waitMs / 1000), estimatedWaitSeconds: plannedWaitSeconds, message: `Rate-limit pacing: waiting ${Math.ceil(waitMs / 1000)}s before the next batch.` });
-        await waitWithPause(waitMs, pauseFile, () => progress(null, batch[0].modId, { phase: 'paused', message: 'Paused while waiting. Completed batches were saved.' }));
+        progress(null, batchProgressLabel(batch), { phase: 'waiting', waitSeconds: Math.ceil(waitMs / 1000), estimatedWaitSeconds: plannedWaitSeconds, message: `Rate-limit pacing: waiting ${Math.ceil(waitMs / 1000)}s before the next batch.` });
+        await waitWithPause(waitMs, pauseFile, () => progress(null, batchProgressLabel(batch), { phase: 'paused', message: 'Paused while waiting. Completed batches were saved.' }));
       }
     }
     lastRequestAt = Date.now(); lastMod = batch[0].modId;
@@ -160,7 +165,7 @@ async function claudeTranslate(batches, config, rules, progress, plannedWaitSeco
   const result = {}; const pace = createPacer(pacingSettings('claude'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
-    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const body = {
       model: config.model || 'claude-haiku-4-5', max_tokens: 16384,
       system: 'Translate English to ' + target.name + '. Return only JSON mapping each i to text. Preserve placeholders exactly.',
@@ -219,17 +224,17 @@ async function geminiTranslate(batches, config, rules, progress, plannedWaitSeco
   const pace = createPacer(pacingSettings('gemini'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
-    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const prompt = 'Translate English to ' + target.name + '. Return only JSON mapping each i to text. Preserve placeholders exactly. Input: ' + JSON.stringify(compactBatch(batch));
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, responseMimeType: 'application/json' } }), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
-    const response = await fetchWithBackoff('Gemini batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0] && batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
+    const response = await fetchWithBackoff('Gemini batch', request, config, (status, attempt, delay) => progress && progress(processed, batchProgressLabel(batch), { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Gemini HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     const content = payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts && payload.candidates[0].content.parts.map(x => x.text || '').join('');
     if (!content) throw new Error('Gemini response missing candidates[0].content.parts.text');
     const parsed = JSON.parse(content); Object.assign(result, expandCompactMap(parsed, batch));
     processed += batch.length; if (onBatch) onBatch(result);
-    if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
