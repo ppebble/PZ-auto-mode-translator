@@ -148,19 +148,19 @@ async function apiTranslate(batches, config, rules, progress, plannedWaitSeconds
   const endpoint = baseUrl.replace(/\/$/, '') + '/chat/completions';
   const result = {}; const pace = createPacer(pacingSettings('openai'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
-    await pace(batch); if (progress) progress(processed, batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    await pace(batch); if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const payload = { model: config.model, temperature: 0, response_format: { type: 'json_object' }, messages: [
       { role: 'system', content: 'Translate English to ' + target.name + '. Return JSON mapping each i to text. Preserve placeholders exactly.' },
       { role: 'user', content: JSON.stringify(compactBatch(batch)) }
     ] };
     if (config.provider === 'deepseek') payload.thinking = { type: 'disabled' };
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config.apiKey }, body: JSON.stringify(payload), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
-    const response = await fetchWithBackoff('OpenAI batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
+    const response = await fetchWithBackoff('OpenAI batch', request, config, (status, attempt, delay) => progress && progress(processed, batchProgressLabel(batch), { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Provider HTTP ' + response.status + ': ' + await response.text());
     const body = await response.json(); const content = body.choices && body.choices[0] && body.choices[0].message && body.choices[0].message.content;
     if (!content) throw new Error('Provider response missing choices[0].message');
     const parsedBody = JSON.parse(content); Object.assign(result, expandCompactMap(parsedBody, batch)); processed += batch.length; if (onBatch) onBatch(result);
-    if (progress) progress(processed, batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
@@ -172,7 +172,7 @@ async function claudeTranslate(batches, config, rules, progress, plannedWaitSeco
     await pace(batch);
     if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const body = {
-      model: config.model || 'claude-haiku-4-5', max_tokens: 16384,
+      model: config.model || 'claude-haiku-4-5', max_tokens: Number(config.maxOutputTokens || 32768),
       system: 'Translate English to ' + target.name + '. Return only JSON mapping each i to text. Preserve placeholders exactly.',
       messages: [{ role: 'user', content: JSON.stringify(compactBatch(batch)) }]
     };
@@ -205,17 +205,17 @@ async function deepLTranslate(batches, config, rules, progress, plannedWaitSecon
   const pace = createPacer(pacingSettings('deepl'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
-    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const body = { target_lang: target.providerCode, preserve_formatting: true, text: batch.map(record => record.source) };
     if (config.model && config.model !== 'default') body.model_type = config.model;
     const request = () => fetch(endpoint, { method: 'POST', headers: { 'Authorization': 'DeepL-Auth-Key ' + config.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
-    const response = await fetchWithBackoff('DeepL batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
+    const response = await fetchWithBackoff('DeepL batch', request, config, (status, attempt, delay) => progress && progress(processed, batchProgressLabel(batch), { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('DeepL HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     if (!Array.isArray(payload.translations) || payload.translations.length !== batch.length) throw new Error('DeepL response count mismatch');
     batch.forEach((record, index) => { result[record.id] = payload.translations[index].text; });
     processed += batch.length; if (onBatch) onBatch(result);
-    if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }
@@ -249,18 +249,18 @@ async function yandexTranslate(batches, config, rules, progress, plannedWaitSeco
   const result = {}; const pace = createPacer(pacingSettings('yandex'), progress, plannedWaitSeconds, pauseFile); let processed = 0;
   for (const batch of batches) {
     await pace(batch);
-    if (progress) progress(processed, batch[0] && batch[0].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
     const body = { texts: batch.map(record => record.source), targetLanguageCode: target.yandexCode, format: 'PLAIN_TEXT' };
     // API-key authorization represents a service account; Yandex documents
     // that folderId must be omitted for this form of authorization.
     const request = () => fetch(endpoint, { method: 'POST', headers: { Authorization: 'Api-Key ' + config.apiKey, 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout((config.requestTimeoutSeconds || 60) * 1000) });
-    const response = await fetchWithBackoff('Yandex batch', request, config, (status, attempt, delay) => progress && progress(processed, batch[0].modId, { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
+    const response = await fetchWithBackoff('Yandex batch', request, config, (status, attempt, delay) => progress && progress(processed, batchProgressLabel(batch), { status, attempt, delay, retry: true, estimatedWaitSeconds: plannedWaitSeconds }));
     if (!response.ok) throw new Error('Yandex HTTP ' + response.status + ': ' + await response.text());
     const payload = await response.json();
     if (!Array.isArray(payload.translations) || payload.translations.length !== batch.length) throw new Error('Yandex response count mismatch');
     batch.forEach((record, index) => { result[record.id] = payload.translations[index].text; });
     processed += batch.length; if (onBatch) onBatch(result);
-    if (progress) progress(processed, batch[batch.length - 1] && batch[batch.length - 1].modId, { estimatedWaitSeconds: plannedWaitSeconds });
+    if (progress) progress(processed, batchProgressLabel(batch), { estimatedWaitSeconds: plannedWaitSeconds });
   }
   return result;
 }

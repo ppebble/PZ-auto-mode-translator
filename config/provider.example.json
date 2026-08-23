@@ -6,8 +6,6 @@
   "sourceLanguage": "EN",
   "targetLanguage": "KO",
   "requestTimeoutSeconds": 30,
-  "batchSize": 20,
-  "maxBatchChars": 3000,
   "minRequestIntervalMs": 70000,
   "modPauseMs": 70000,
   "costEstimate": {
