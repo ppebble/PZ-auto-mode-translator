@@ -92,7 +92,7 @@ local function layoutActionButtons()
     local buttonWidth = 250
     local columnGap = 12
     local rowGap = 6
-    local rowHeight = testButton.element:getHeight() + rowGap
+    local rowHeight = reviewButton.element:getHeight() + rowGap
     for index, option in ipairs(buttons) do
         local column = (index - 1) % 2
         local row = math.floor((index - 1) / 2)

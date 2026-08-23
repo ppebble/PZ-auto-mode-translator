@@ -29,6 +29,7 @@ assert.match(optionsSource, /Bulk correct translations/, 'options must expose pl
 assert.doesNotMatch(optionsSource, /Edit user regex\/glossary/, 'options must not expose regex authoring');
 assert.match(optionsSource, /local function layoutActionButtons\(\)/, 'mod option action buttons must use an explicit compact layout');
 assert.match(optionsSource, /element:setX\(/, 'mod option action buttons must be arranged in columns after PZAPI creates them');
+assert.doesNotMatch(optionsSource, /testButton/, 'quality-tool layout must not reference the connection-test button moved to character info');
 assert.doesNotMatch(optionsSource, /options:addButton\("queueTranslation"|options:addButton\("pauseTranslation"|options:addButton\("resumeTranslation"/, 'job controls must not be duplicated in Mod Options');
 assert.doesNotMatch(optionsSource, /options:addButton\("testConnection"|options:addButton\("refreshStatus"/, 'runtime controls must not be duplicated in Mod Options');
 assert.doesNotMatch(optionsSource, /statusIndicator|statusDetail/, 'runtime status fields must only be shown on the character info dashboard');
