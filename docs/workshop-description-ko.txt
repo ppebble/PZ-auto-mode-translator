@@ -7,12 +7,11 @@ Project Zomboid Build 42.20.x 이상에서 사용하는 로컬 번역팩 제작 
 [h2]필수 준비물[/h2]
 [list]
 [*]Project Zomboid Build 42.20.x 이상
-[*]Node.js 20 LTS 이상
 [*]사용자가 직접 발급한 Gemini, DeepL, OpenAI, Claude, DeepSeek, Yandex 또는 OpenAI 호환 API 키
 [*]외부 Translation Helper: [url=https://github.com/ppebble/PZ-auto-mode-translator/releases/latest]최신 버전 다운로드[/url]
 [/list]
 
-[b]중요:[/b] Steam 창작마당 모드는 직접 인터넷 요청이나 외부 프로그램 실행을 할 수 없습니다. Translation Helper ZIP을 별도 폴더에 압축 해제하고 직접 실행해야 합니다. Helper와 API 키는 창작마당 모드에 포함되지 않습니다.
+[b]중요:[/b] Steam 창작마당 모드는 직접 인터넷 요청이나 외부 프로그램 실행을 할 수 없습니다. Translation Helper ZIP을 별도 폴더에 압축 해제하고 직접 실행해야 합니다. Helper에는 검증된 실행 런타임이 포함되어 있어 Node.js를 따로 설치할 필요가 없습니다. Helper와 API 키는 창작마당 모드에 포함되지 않습니다.
 
 [h2]HOW TO USE[/h2]
 [olist]
