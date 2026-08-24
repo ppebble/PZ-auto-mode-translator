@@ -13,6 +13,10 @@ end
 local function selectedValue(option, values)
     return values[option:getValue()] or values[1]
 end
+local function visibleSelectedValue(option, values)
+    local index = option.element ~= nil and option.element.selected or option:getValue()
+    return values[index] or values[1]
+end
 local providerLabels = { "Google Gemini API", "DeepL API", "OpenAI API", "Claude API", "DeepSeek API", "Yandex Cloud Translate API", "OpenAI-compatible custom" }
 local providerValues = { "gemini", "deepl", "openai", "claude", "deepseek", "yandex", "openai-compatible" }
 -- These are Project Zomboid translation-directory codes, not provider codes.
@@ -50,6 +54,14 @@ for _, value in ipairs(modelValues) do
     modelChoice:addItem(value, selected)
 end
 local customModel = options:addTextEntry("customModel", "Custom model ID", saved.model, "Only used with Custom model ID.")
+local function refreshCustomInputState()
+    local customProvider = visibleSelectedValue(providerChoice, providerValues) == "openai-compatible"
+    baseUrl:setEnabled(customProvider)
+    customModel:setEnabled(customProvider and visibleSelectedValue(modelChoice, modelValues) == "Custom model ID")
+end
+providerChoice.onChange = refreshCustomInputState
+modelChoice.onChange = refreshCustomInputState
+refreshCustomInputState()
 local apiKey = options:addTextEntry("apiKey", "API Key", saved.apiKey, "Saved locally by the game. Revoke a key if it is exposed.")
 local languageChoice = options:addComboBox("targetLanguage", "Target language", "Project Zomboid language code. JP is Japanese; provider-specific codes are converted by the worker.")
 for _, value in ipairs(languageValues) do languageChoice:addItem(value, value == saved.targetLanguage) end
@@ -106,6 +118,7 @@ end
 
 local function layoutActionButtonsOnce()
     if not layoutActionButtons() then return end
+    refreshCustomInputState()
     Events.OnTick.Remove(layoutActionButtonsOnce)
 end
 Events.OnTick.Add(layoutActionButtonsOnce)

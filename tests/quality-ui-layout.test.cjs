@@ -40,6 +40,12 @@ assert.doesNotMatch(optionsSource, /Edit user regex\/glossary/, 'options must no
 assert.match(optionsSource, /local function layoutActionButtons\(\)/, 'mod option action buttons must use an explicit compact layout');
 assert.match(optionsSource, /element:setX\(/, 'mod option action buttons must be arranged in columns after PZAPI creates them');
 assert.match(optionsSource, /Events\.OnTick\.Remove\(layoutActionButtonsOnce\)/, 'button layout must unregister itself after the first successful pass');
+assert.match(optionsSource, /option\.element ~= nil and option\.element\.selected or option:getValue\(\)/, 'dependent controls must read the live combo selection before Apply');
+assert.match(optionsSource, /baseUrl:setEnabled\(customProvider\)/, 'custom base URL must only be editable for the OpenAI-compatible custom provider');
+assert.match(optionsSource, /customModel:setEnabled\(customProvider and visibleSelectedValue\(modelChoice, modelValues\) == "Custom model ID"\)/, 'custom model ID must require both the custom provider and custom model selection');
+assert.match(optionsSource, /providerChoice\.onChange = refreshCustomInputState/, 'changing provider must immediately refresh custom input availability');
+assert.match(optionsSource, /modelChoice\.onChange = refreshCustomInputState/, 'changing model must immediately refresh custom model availability');
+assert.match(optionsSource, /layoutActionButtonsOnce\(\)[\s\S]*refreshCustomInputState\(\)[\s\S]*Events\.OnTick\.Remove/, 'initial custom input state must be refreshed after PZAPI creates the controls');
 assert.doesNotMatch(optionsSource, /testButton/, 'quality-tool layout must not reference the connection-test button moved to character info');
 assert.doesNotMatch(optionsSource, /options:addButton\("queueTranslation"|options:addButton\("pauseTranslation"|options:addButton\("resumeTranslation"/, 'job controls must not be duplicated in Mod Options');
 assert.doesNotMatch(optionsSource, /options:addButton\("testConnection"|options:addButton\("refreshStatus"/, 'runtime controls must not be duplicated in Mod Options');
