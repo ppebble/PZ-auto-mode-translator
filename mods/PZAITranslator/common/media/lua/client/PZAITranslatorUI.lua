@@ -290,7 +290,7 @@ if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
         local ok, err = pcall(function()
             if not self.panel or not self.panel.viewList then return end
             local view = DashboardPanel:new(0, 8, math.max(self.width, DASHBOARD_MIN_WIDTH), math.max(self.height - 8, DASHBOARD_MIN_HEIGHT)); view:initialise()
-            local title = ISLabel:new(16, 18, 20, "AI Translator", 1, 1, 1, 1, UIFont.Medium, true); title:initialise(); view:addChild(title)
+            local title = ISLabel:new(16, 18, 20, "AI Translation Generator", 1, 1, 1, 1, UIFont.Medium, true); title:initialise(); view:addChild(title)
             local info = ISLabel:new(16, 52, 18, "Translation jobs. Provider and review tools: Mod Options.", 0.8, 0.8, 0.8, 1, UIFont.Small, true); info:initialise(); view:addChild(info)
             local buttonX = 16
             local buttonWidth = math.min(300, math.max(180, view.width - 32))
@@ -316,7 +316,7 @@ if ISCharacterInfoWindow and not PZAITranslator.charTabHooked then
             view.statusDetail:initialise(); view.statusDetail:instantiate(); view.statusDetail:noBackground(); view.statusDetail.autosetheight = false; view:addChild(view.statusDetail)
             refreshDashboard(view)
             PZAITranslator.characterDashboard = view
-            self.panel:addView("AI Translator", view)
+            self.panel:addView("AI Translation Generator", view)
             local list = self.panel.viewList; if #list > TAB_INDEX then local entry=table.remove(list,#list); table.insert(list,TAB_INDEX,entry) end
         end)
         if not ok then print("PZAITranslator: character tab failed: " .. tostring(err)) end

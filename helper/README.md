@@ -1,6 +1,6 @@
-# PZ Auto Mode Translator Helper
+# PZ AI Translation Generator Helper
 
-This local helper processes translation requests made by the **PZ Auto Mode Translator** Steam Workshop mod for Project Zomboid **Build 42 Stable 42.20.x and later**.
+This local helper processes translation requests made by the **PZ AI Translation Generator** Steam Workshop mod for Project Zomboid **Build 42 Stable 42.20.x and later**.
 
 ## Not included
 
@@ -12,7 +12,7 @@ API keys and translation results remain on each user's PC under `C:\Users\<user>
 
 ## Requirements
 
-1. Subscribe to and enable **PZ Auto Mode Translator** in Steam Workshop.
+1. Subscribe to and enable **PZ AI Translation Generator** in Steam Workshop.
 2. Install [Node.js 20 LTS or later](https://nodejs.org/). Running `node --version` in PowerShell must show a version number after installation.
 3. Extract this entire ZIP to a writable folder outside Steam and Program Files, for example `C:\Users\<user>\Documents\PZ-Auto-Mode-Translator-Helper`.
 
@@ -20,7 +20,7 @@ API keys and translation results remain on each user's PC under `C:\Users\<user>
 
 1. Double-click `START-TranslationHelper.vbs`. After the confirmation message, the helper keeps running in the background.
 2. In-game, save your provider, model, API key, and target language, then run **Test connection**.
-3. Open the **AI Translator** tab in the character information window, select mods, and choose **Queue translation**.
+3. Open the **AI Translation Generator** tab in the character information window, select mods, and choose **Queue translation**.
 4. Wait until Translation status shows `complete`.
 5. Optionally review/correct generated results, page through every repeated-phrase match, explicitly confirm the total match count before bulk saving, or scan selected mods for review-only hard-coded Lua candidates.
 6. Enable `PZAITranslationGenerated`, return to the main menu, then enter the world again.

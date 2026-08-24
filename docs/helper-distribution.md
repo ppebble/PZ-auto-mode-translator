@@ -4,7 +4,7 @@
 
 | Deliverable | Distribution channel | Purpose | Never includes |
 | --- | --- | --- | --- |
-| `PZ Auto Mode Translator` | Steam Workshop | In-game settings, target selection, job requests, generated-pack loading | API keys, API client code, Node worker |
+| `PZ AI Translation Generator` | Steam Workshop | In-game settings, target selection, job requests, generated-pack loading | API keys, API client code, Node worker |
 | `PZ-AI-Translator-Helper-<version>.zip` | GitHub Release | Local API requests, scanning, validation, generated-pack installation | API keys, user translation output, Steam mods |
 
 Build 42 Workshop Lua cannot start a process or access Java HTTP APIs. The Helper is therefore a separate, explicitly started local application and is never auto-run by the Workshop mod.

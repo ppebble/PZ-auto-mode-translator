@@ -1,4 +1,4 @@
-# PZ AI Translator Development Guide
+# PZ AI Translation Generator Development Guide
 
 ## Product contract
 

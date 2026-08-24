@@ -72,7 +72,7 @@ New-Item -ItemType Directory -Force -Path $lua, (Split-Path $providerJson -Paren
 try {
     $lockStream = [System.IO.File]::Open($lock, [System.IO.FileMode]::OpenOrCreate, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
 } catch [System.IO.IOException] {
-    Write-Host 'PZ AI Translator Helper is already running.'
+    Write-Host 'PZ AI Translation Generator Helper is already running.'
     exit 0
 }
 

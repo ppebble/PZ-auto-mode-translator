@@ -1,4 +1,4 @@
-# PZ Auto Mode Translator
+# PZ AI Translation Generator
 
 A Project Zomboid **Build 42 Stable 42.20.x and later** translation companion. It finds untranslated strings in active mods, translates them with an AI provider chosen by the user, and creates a separate local overlay mod without modifying Workshop originals.
 
@@ -111,8 +111,8 @@ installed by **Apply saved edits**.
 ## In-game flow
 
 1. Start the separate Helper with `START-TranslationHelper.vbs` from the extracted release ZIP.
-2. In Mod Options, open **자동 모드 번역기**, configure the provider, model, API key, and target language, then run **Test connection**.
-3. In the character information window, open **AI Translator**, select target mods, and queue translation.
+2. In Mod Options, open **PZ AI 번역팩 생성기**, configure the provider, model, API key, and target language, then run **Test connection**.
+3. In the character information window, open **AI Translation Generator**, select target mods, and queue translation.
 4. Wait for Translation status to show `complete`.
 5. Optionally review generated translations, bulk-correct a repeated mistranslation, or scan selected mods for hard-coded Lua candidates.
 6. Enable `PZAITranslationGenerated`, return to the main menu, and enter the world again.

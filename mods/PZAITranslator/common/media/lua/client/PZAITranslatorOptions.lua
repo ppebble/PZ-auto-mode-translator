@@ -40,7 +40,7 @@ end
 addAccountModels()
 
 options:addTitle(optionTitle)
-options:addDescription("Configure the provider here. Select mods, control translation jobs, test the connection, and read Helper status from Character Info > AI Translator.")
+options:addDescription("Configure the provider here. Select mods, control translation jobs, test the connection, and read Helper status from Character Info > AI Translation Generator.")
 local providerChoice = options:addComboBox("providerChoice", "Provider", "The Helper sends requests through your own provider account and API key. Each provider applies its own quota and billing rules. OpenAI-compatible custom supports the Chat Completions protocol.")
 for index, label in ipairs(providerLabels) do providerChoice:addItem(label, providerValues[index] == saved.provider) end
 local baseUrl = options:addTextEntry("baseUrl", "Custom Base URL", saved.baseUrl, "Only for OpenAI-compatible custom. Gemini, DeepL, OpenAI, Claude, DeepSeek, and Yandex use their official endpoints.")

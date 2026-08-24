@@ -55,6 +55,23 @@ const characterSource = fs.readFileSync(
   path.join(__dirname, '..', 'mods', 'PZAITranslator', 'common', 'media', 'lua', 'client', 'PZAITranslatorUI.lua'),
   'utf8',
 );
+const modInfo = fs.readFileSync(
+  path.join(__dirname, '..', 'mods', 'PZAITranslator', 'common', 'mod.info'),
+  'utf8',
+);
+const englishUi = fs.readFileSync(
+  path.join(__dirname, '..', 'mods', 'PZAITranslator', 'common', 'media', 'lua', 'shared', 'Translate', 'EN', 'UI.json'),
+  'utf8',
+);
+const koreanUi = fs.readFileSync(
+  path.join(__dirname, '..', 'mods', 'PZAITranslator', 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'UI.json'),
+  'utf8',
+);
+assert.match(modInfo, /^name=PZ AI Translation Generator$/m, 'mod selection must use the generator product name');
+assert.match(modInfo, /^id=PZAITranslator$/m, 'the existing internal mod ID must remain stable');
+assert.match(englishUi, /"UI_PZAutoModeTranslator_Title": "PZ AI Translation Generator"/, 'English Mod Options must use the generator product name');
+assert.match(koreanUi, /"UI_PZAutoModeTranslator_Title": "PZ AI 번역팩 생성기"/, 'Korean Mod Options must identify the product as a translation-pack generator');
+assert.match(characterSource, /"AI Translation Generator"/, 'character info must use the generator product name');
 assert.match(characterSource, /Manage translation targets/, 'character info dashboard must own target selection');
 assert.match(characterSource, /Start new translation/, 'character info dashboard must own new jobs');
 assert.match(characterSource, /Resume interrupted translation/, 'character info dashboard must own resume');
@@ -62,8 +79,8 @@ assert.match(characterSource, /Pause after current request/, 'character info das
 assert.match(characterSource, /Test API: Hello, World!/, 'character info dashboard must own connection tests');
 assert.match(characterSource, /Refresh status/, 'character info dashboard must own status refresh');
 assert.match(characterSource, /Status detail:/, 'character info dashboard must show detailed status');
-assert.match(characterSource, /local DASHBOARD_MIN_WIDTH = 620/, 'AI Translator tab must request a protection-style wide information window');
-assert.match(characterSource, /self:setWidthAndParentWidth\(math\.max\(self\.width, DASHBOARD_MIN_WIDTH\)\)/, 'AI Translator tab must expand its parent information window');
+assert.match(characterSource, /local DASHBOARD_MIN_WIDTH = 620/, 'AI Translation Generator tab must request a protection-style wide information window');
+assert.match(characterSource, /self:setWidthAndParentWidth\(math\.max\(self\.width, DASHBOARD_MIN_WIDTH\)\)/, 'AI Translation Generator tab must expand its parent information window');
 assert.match(characterSource, /view\.startButton:setEnable\(not busy\)/, 'job-start controls must be disabled while a job is queued or running');
 assert.match(characterSource, /PZAITranslator\.refreshQualityActionStates\(\)/, 'the existing status poll must also refresh quality-action availability');
 assert.match(characterSource, /Conflicts /, 'generated-pack conflicts must be visible on the in-game dashboard');

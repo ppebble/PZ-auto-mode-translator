@@ -1,4 +1,4 @@
-[h1]PZ Auto Mode Translator[/h1]
+[h1]PZ AI Translation Generator[/h1]
 
 Project Zomboid Build 42.20.x 이상에서 사용하는 로컬 번역팩 제작 도구입니다.
 
@@ -16,12 +16,12 @@ Project Zomboid Build 42.20.x 이상에서 사용하는 로컬 번역팩 제작 
 
 [h2]HOW TO USE[/h2]
 [olist]
-[*]이 모드를 구독하고 게임의 모드 목록에서 [b]PZ Auto Mode Translator[/b]를 활성화합니다.
+[*]이 모드를 구독하고 게임의 모드 목록에서 [b]PZ AI Translation Generator[/b]를 활성화합니다.
 [*]Translation Helper ZIP을 Steam 및 Program Files 외부의 쓰기 가능한 폴더에 압축 해제합니다.
 [*][b]START-TranslationHelper.vbs[/b]를 실행합니다. Helper는 번역 요청을 기다리며 백그라운드에서 동작합니다.
-[*]게임에서 [b]Options > Mods > PZ Auto Mode Translator[/b]를 엽니다.
+[*]게임에서 [b]Options > Mods > PZ AI 번역팩 생성기[/b]를 엽니다.
 [*]Provider, Translation model, API Key, Target language를 설정하고 [b]Apply[/b]를 누릅니다.
-[*]캐릭터 정보 창의 [b]AI Translator[/b] 탭을 엽니다.
+[*]캐릭터 정보 창의 [b]AI Translation Generator[/b] 탭을 엽니다.
 [*][b]Test API: Hello, World![/b]로 연결을 확인합니다.
 [*][b]Manage translation targets[/b]를 열고 번역할 모드를 명시적으로 선택한 뒤 창을 닫아 선택을 저장합니다.
 [*][b]Start new translation[/b]을 누릅니다. 무료 API 제한을 보호하기 위해 요청 사이에 기본 70초 대기가 적용될 수 있습니다.
@@ -39,7 +39,7 @@ Project Zomboid Build 42.20.x 이상에서 사용하는 로컬 번역팩 제작 
 
 [h2]생성 번역 검토[/h2]
 [olist]
-[*][b]Options > Mods > PZ Auto Mode Translator > Quality tools[/b]에서 [b]Review generated translations[/b]를 엽니다.
+[*][b]Options > Mods > PZ AI 번역팩 생성기 > Quality tools[/b]에서 [b]Review generated translations[/b]를 엽니다.
 [*]기본 필터는 [b]Needs review[/b]입니다. 항목을 선택하고 Reviewed target을 수정한 뒤 [b]Save edit[/b]을 누릅니다.
 [*]저장한 수정이 있으면 [b]Apply saved edits[/b]이 활성화됩니다. 적용 완료 후 메인 화면으로 나갔다가 월드에 다시 입장합니다.
 [*]반복되는 오역은 [b]Bulk correct translations[/b]에서 Preview로 전체 페이지를 확인합니다. 저장 전 [b]Confirm all N[/b]을 한 번 더 눌러 총 N개 전체 적용을 확인해야 합니다.

@@ -4,6 +4,8 @@ const path = require('node:path');
 
 const description = fs.readFileSync(path.join(__dirname, '..', 'docs', 'workshop-description-ko.txt'), 'utf8');
 
+assert.match(description, /^\[h1\]PZ AI Translation Generator\[\/h1\]$/m, 'Workshop title must present the product as a translation generator');
+assert.doesNotMatch(description, /PZ Auto Mode Translator|AI Translator/, 'Workshop copy must not use the legacy translator branding');
 assert.match(description, /https:\/\/github\.com\/ppebble\/PZ-auto-mode-translator\/releases\/latest/, 'Workshop copy must link to the Helper release page');
 assert.match(description, /pending 항목만/, 'Workshop copy must explain that only pending strings reach providers');
 assert.match(description, /원본 모드를 수정하지/, 'Workshop copy must preserve the source-mod immutability promise');

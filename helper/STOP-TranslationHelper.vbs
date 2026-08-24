@@ -15,7 +15,7 @@ For Each process In processes
 Next
 
 If stopped > 0 Then
-    MsgBox "Translation Helper stopped.", vbInformation, "PZ Auto Mode Translator"
+    MsgBox "Translation Helper stopped.", vbInformation, "PZ AI Translation Generator"
 Else
-    MsgBox "Translation Helper is not running.", vbInformation, "PZ Auto Mode Translator"
+    MsgBox "Translation Helper is not running.", vbInformation, "PZ AI Translation Generator"
 End If
