@@ -9,6 +9,7 @@ runtime/
 output/
 logs/
 *.bak
+dist/
 
 # OS/editor
 .vscode/

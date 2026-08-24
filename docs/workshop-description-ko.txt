@@ -1,0 +1,72 @@
+[h1]PZ AI Translation Generator[/h1]
+
+Project Zomboid Build 42.20.x 이상에서 사용하는 로컬 번역팩 제작 도구입니다.
+
+이 모드는 활성 모드 전체를 다시 번역하지 않습니다. 원본 모드 또는 활성 번역팩에 이미 목표 언어 번역이 있는 항목은 보존하며, 번역이 없는 pending 항목만 사용자가 선택한 AI 제공자에게 전송합니다.
+
+[h2]필수 준비물[/h2]
+[list]
+[*]Project Zomboid Build 42.20.x 이상
+[*]Node.js 20 LTS 이상
+[*]사용자가 직접 발급한 Gemini, DeepL, OpenAI, Claude, DeepSeek, Yandex 또는 OpenAI 호환 API 키
+[*]외부 Translation Helper: [url=https://github.com/ppebble/PZ-auto-mode-translator/releases/latest]최신 버전 다운로드[/url]
+[/list]
+
+[b]중요:[/b] Steam 창작마당 모드는 직접 인터넷 요청이나 외부 프로그램 실행을 할 수 없습니다. Translation Helper ZIP을 별도 폴더에 압축 해제하고 직접 실행해야 합니다. Helper와 API 키는 창작마당 모드에 포함되지 않습니다.
+
+[h2]HOW TO USE[/h2]
+[olist]
+[*]이 모드를 구독하고 게임의 모드 목록에서 [b]PZ AI Translation Generator[/b]를 활성화합니다.
+[*]Translation Helper ZIP을 Steam 및 Program Files 외부의 쓰기 가능한 폴더에 압축 해제합니다.
+[*][b]START-TranslationHelper.vbs[/b]를 실행합니다. Helper는 번역 요청을 기다리며 백그라운드에서 동작합니다.
+[*]게임에서 [b]Options > Mods > PZ AI 번역팩 생성기[/b]를 엽니다.
+[*]Provider, Translation model, API Key, Target language를 설정하고 [b]Apply[/b]를 누릅니다.
+[*]캐릭터 정보 창의 [b]AI Translation Generator[/b] 탭을 엽니다.
+[*][b]Test API: Hello, World![/b]로 연결을 확인합니다.
+[*][b]Manage translation targets[/b]를 열고 번역할 모드를 명시적으로 선택한 뒤 창을 닫아 선택을 저장합니다.
+[*][b]Start new translation[/b]을 누릅니다. 무료 API 제한을 보호하기 위해 요청 사이에 기본 70초 대기가 적용될 수 있습니다.
+[*]상태가 [b]Complete[/b]가 될 때까지 기다립니다. 게임을 계속 플레이하거나 메인 메뉴로 이동해도 Helper는 백그라운드에서 계속 동작합니다.
+[*]게임 모드 목록에서 새로 생성된 [b]PZAITranslationGenerated[/b]를 활성화합니다.
+[*]메인 화면으로 나간 뒤 월드에 다시 입장하면 생성된 번역이 로드됩니다. 반영되지 않으면 게임을 완전히 재시작합니다.
+[/olist]
+
+[h2]중단 및 재개[/h2]
+[list]
+[*][b]Pause after current request[/b]: 현재 API 요청이 끝난 뒤 다음 요청을 보내지 않습니다.
+[*][b]Resume interrupted translation[/b]: 완료된 배치와 번역 메모리를 재사용하고 남은 pending 항목만 처리합니다.
+[*]다른 작업이 queued 또는 running 상태이면 새 번역, 연결 테스트, Review 적용, Lua 스캔 버튼은 자동으로 비활성화됩니다.
+[/list]
+
+[h2]생성 번역 검토[/h2]
+[olist]
+[*][b]Options > Mods > PZ AI 번역팩 생성기 > Quality tools[/b]에서 [b]Review generated translations[/b]를 엽니다.
+[*]기본 필터는 [b]Needs review[/b]입니다. 항목을 선택하고 Reviewed target을 수정한 뒤 [b]Save edit[/b]을 누릅니다.
+[*]저장한 수정이 있으면 [b]Apply saved edits[/b]이 활성화됩니다. 적용 완료 후 메인 화면으로 나갔다가 월드에 다시 입장합니다.
+[*]반복되는 오역은 [b]Bulk correct translations[/b]에서 Preview로 전체 페이지를 확인합니다. 저장 전 [b]Confirm all N[/b]을 한 번 더 눌러 총 N개 전체 적용을 확인해야 합니다.
+[/olist]
+
+[h2]하드코딩 Lua 문자열[/h2]
+[b]Review hardcoded Lua strings[/b]는 선택한 모드의 Lua UI 리터럴 후보만 보여주는 검토 도구입니다.
+
+이 기능은 원본 모드를 수정하지 않으며, 선택한 문자열을 API에 전송하거나 자동으로 패치하지 않습니다. 번역 키를 사용하지 않고 Lua 코드에서 직접 출력하는 문자열은 별도의 호환 패치가 필요할 수 있습니다.
+
+[h2]오류 해결[/h2]
+[list]
+[*][b]Queued에서 멈춤[/b]: Translation Helper가 실행 중인지 확인합니다.
+[*][b]No API key is saved[/b]: Mod Options에서 API 키를 입력하고 Apply를 누릅니다.
+[*][b]HTTP 401 / 403[/b]: API 키, 프로젝트 및 선택 모델 권한을 확인합니다.
+[*][b]HTTP 429 / 456[/b]: 분당 제한 또는 일일/계정 할당량이 소진된 상태일 수 있습니다. 제공자 대시보드를 확인하고 필요한 경우 모델이나 제공자를 변경한 뒤 Resume을 사용합니다.
+[*][b]Conflicts N[/b]: 서로 다른 모드가 같은 전역 번역 키에 다른 값을 제공했습니다. 임의 값을 선택하지 않고 해당 키를 생성팩에서 제외합니다. 자세한 내용은 PZAITranslationGenerated의 pack-report.json에 기록됩니다.
+[*][b]영문이 남아 있음[/b]: 기존 번역팩과 모드 우선순위, PZAITranslationGenerated 활성화 여부를 확인합니다. Lua 하드코딩 문자열은 자동 번역 대상이 아닙니다.
+[/list]
+
+[h2]개인정보 및 안전성[/h2]
+[list]
+[*]Workshop 원본 모드와 Project Zomboid 설치 파일을 수정하지 않습니다.
+[*]API 키, 번역 메모리 및 생성 결과는 사용자 PC에만 저장됩니다.
+[*]API 키와 Helper는 창작마당 배포물에 포함되지 않습니다.
+[*]이미 존재하는 목표 언어 번역과 검증된 생성 번역은 재사용하며, pending 항목만 API 후보가 됩니다.
+[/list]
+
+[h2]Helper 종료[/h2]
+게임을 종료해도 Helper는 계속 실행될 수 있습니다. 번역 작업이 끝난 뒤 Helper 폴더의 [b]STOP-TranslationHelper.vbs[/b]를 실행하면 이 Helper만 종료됩니다.

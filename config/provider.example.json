@@ -1,4 +1,4 @@
-﻿{
+{
   "provider": "gemini",
   "baseUrl": "",
   "model": "gemini-2.5-flash-lite",
@@ -6,6 +6,14 @@
   "sourceLanguage": "EN",
   "targetLanguage": "KO",
   "requestTimeoutSeconds": 30,
-  "batchSize": 20,
+  "minRequestIntervalMs": 70000,
+  "modPauseMs": 70000,
+  "costEstimate": {
+    "enabled": false,
+    "usdPerMillionInputTokens": 0,
+    "usdPerMillionOutputTokens": 0,
+    "usdPerMillionCharacters": 0,
+    "outputTokenMultiplier": 1
+  },
   "dryRun": true
 }

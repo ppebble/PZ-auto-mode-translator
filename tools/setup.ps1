@@ -6,7 +6,7 @@ param(
   [string]$ZomboidHome = "$env:USERPROFILE\Zomboid"
 )
 $ErrorActionPreference = 'Stop'
-Write-Host "PZ AI Translator setup"
+Write-Host "PZ AI Translation Generator setup"
 $checks = @('git','java','node','npm')
 foreach ($name in $checks) {
   $cmd = Get-Command $name -ErrorAction SilentlyContinue

@@ -176,18 +176,20 @@ unseen -> pending -> translated -> validated -> generated -> pending_restart -> 
 
 ## API 비용/작업량 제어
 
-- 기본 batch size는 20~50개
-- 긴 설명은 별도 batch
+- 배치 크기는 공급자별 고정 프로필과 문자 상한을 함께 적용한다.
+- 생성형 공급자와 DeepL은 최대 1,600개/64,000자, Yandex는 최대 1,600개/10,000자로 제한한다.
+- 알 수 없는 OpenAI 호환 엔드포인트는 400개/16,000자의 보수적인 fallback을 사용한다.
+- 선택된 여러 모드는 공급자별 상한까지 같은 요청에 묶되, 레코드 ID와 체크포인트는 원래 모드 소유권을 유지한다.
 - 동일 원문은 한 번만 요청
 - 기존 번역/용어집/TM 우선
 - 예상 문자/토큰/요청 수를 실행 전에 표시
 - 사용자가 모드별로 작업량을 해제할 수 있게 한다.
 - 중단 후 재개 가능해야 한다.
 
-### 기존 번역 건너뛰기 정책
+### 기존 번역 보호 정책
 
 - 기본 동작은 **문자열 단위 보호**다. 동일 key에 비어 있지 않은 target 값이 있으면 해당 문자열을 AI에 보내지 않는다.
-- `Skip mods that already provide the target language`를 켜면 대상 언어 JSON이 하나라도 있는 모드는 통째로 제외한다. 부분 번역의 빈 항목도 남기므로, 완성된 한국어 번역 모드를 보존하려는 경우에만 사용한다.
+- 사용자가 선택한 모드는 부분 번역 여부와 관계없이 검사하되, 이미 존재하는 대상 언어 key는 API에 보내지 않는다.
 - 모드 선택 목록은 Mod Options의 정적 페이지가 아니라 별도 동적 선택 창에서 제공한다. 그 창은 열거나 Refresh할 때마다 `getActivatedMods()`를 다시 읽고, 선택한 mod ID만 Worker에 전달해야 한다.
 
 ## MVP 확정 범위
@@ -198,14 +200,20 @@ unseen -> pending -> translated -> validated -> generated -> pending_restart -> 
 - 기본 전체 선택 및 모드별 제외
 - Tier 1 공식 Translate JSON 및 Tier 2 B42 `craftRecipe` 키
 - 기존 target 번역 보호
-- exact/regex 수동 규칙
-- glossary와 placeholder 보호
+- Helper에 내장된 exact/regex 정규화 규칙
+- 내장 glossary와 placeholder 보호
 - AI 결과 검증
 - 재실행 적용
 
-다음은 MVP 완료 후 추가한다.
+추가된 품질 제어 범위:
 
-- Lua 하드코딩 탐지
+- 생성 결과와 `needs_review` 항목을 로컬 UI에서 검토·수정하고, placeholder 재검증 후 API 없이 재설치
+- 생성 번역의 반복 오역을 일반 문자열로 미리보기하고 mod/category 범위에서 일괄 교정
+- 알려진 Lua UI 호출과 표시용 field 대입의 하드코딩 문자열을 탐지하고 명시적으로 선택하는 review-only 목록
+
+다음은 이후 별도 호환성 작업으로 남긴다.
+
+- 선택한 Lua 하드코딩 문자열의 자동 패치 또는 런타임 치환
 - 실시간 현재 세션 적용
 - 멀티플레이 자동 배포
 - Workshop 자동 업로드
