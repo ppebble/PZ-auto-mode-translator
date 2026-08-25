@@ -11,6 +11,9 @@ $utf8Console = New-Object System.Text.UTF8Encoding($false)
 $OutputEncoding = $utf8Console
 & chcp.com 65001 | Out-Null
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$bundledNode = Join-Path $root 'bin\node.exe'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+$nodeExe = if (Test-Path -LiteralPath $bundledNode) { $bundledNode } elseif ($null -ne $nodeCommand) { $nodeCommand.Source } else { throw 'The bundled Node.js runtime is missing. Download and extract the complete Helper ZIP again.' }
 $lua = Join-Path $ZomboidHome 'Lua'
 $job = Join-Path $lua 'PZAITranslator_job.ini'
 $claimedJob = Join-Path $lua 'PZAITranslator_job.ini.processing'
@@ -50,7 +53,7 @@ function Friendly-Error([string]$Raw) {
     if ($text -match 'HTTP 429') { return 'HTTP 429: Provider rate limit or quota. Wait, check provider usage, then retry.' }
     if ($text -match 'No provider API key|API key and model are required|API key is empty') { return 'No API key is saved. Enter and apply an API key in Mod Options before queueing translation.' }
     if ($text -match 'HTTP 401|HTTP 403|API key') { return 'The provider rejected the API key or account permission. Recheck the key, selected project, and model access.' }
-    if ($text -match 'node.+not recognized|node.+not found') { return 'Node.js 20 LTS or later is required by the Translation Helper. Install Node.js, then restart the Helper.' }
+    if ($text -match 'bundled Node\.js runtime is missing|node.+not recognized|node.+not found') { return 'The Helper runtime is incomplete. Download and extract the complete Helper ZIP again.' }
     if ($text -match 'timed out|Timeout') { return 'The provider request timed out. Check the network and provider status, then retry.' }
     return 'Translation failed: ' + $text
 }
@@ -127,9 +130,9 @@ try {
             $luaScanManifest = Join-Path $root 'runtime\lua-scan-manifest.json'
             $scanArgs = @((Join-Path $PSScriptRoot 'worker\scan-b42.cjs'), '--zomboid-home', $ZomboidHome, '--target-language', $language, '--exclude', 'PZAITranslator,PZAITranslationGenerated', '--translation-memory', $translationMemory, '--output', $luaScanManifest, '--no-catalog')
             if (-not [string]::IsNullOrWhiteSpace($request.includeMods)) { $scanArgs += @('--include-mods', $request.includeMods) }
-            $scanOutput = & node @scanArgs 2>&1
+            $scanOutput = & $nodeExe @scanArgs 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($scanOutput | Out-String).Trim() }
-            $candidateOutput = & node (Join-Path $PSScriptRoot 'worker\scan-lua-hardcoded.cjs') --manifest $luaScanManifest --output $luaCandidates 2>&1
+            $candidateOutput = & $nodeExe (Join-Path $PSScriptRoot 'worker\scan-lua-hardcoded.cjs') --manifest $luaScanManifest --output $luaCandidates 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($candidateOutput | Out-String).Trim() }
             $candidateCount = 0
             if (Test-Path -LiteralPath $luaCandidates) { $candidateCount = (Select-String -LiteralPath $luaCandidates -Pattern '^candidate=').Count }
@@ -142,9 +145,9 @@ try {
             if (-not (Test-Path -LiteralPath $reviewEdits)) { throw 'No saved review edits exist.' }
             Write-Status 'running' 'Applying reviewed translations and rebuilding the generated overlay.' @{ phase = 'validating'; total = 0; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
             $reviewReport = Join-Path $root 'runtime\review-apply-report.json'
-            $reviewOutput = & node (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode apply --input $translatedManifest --edits $reviewEdits --output $translatedManifest --translation-memory $translationMemory --report $reviewReport 2>&1
+            $reviewOutput = & $nodeExe (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode apply --input $translatedManifest --edits $reviewEdits --output $translatedManifest --translation-memory $translationMemory --report $reviewReport 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($reviewOutput | Out-String).Trim() }
-            $materializeOutput = & node (Join-Path $PSScriptRoot 'worker\materialize-b42.cjs') --input $translatedManifest --output $generatedPack 2>&1
+            $materializeOutput = & $nodeExe (Join-Path $PSScriptRoot 'worker\materialize-b42.cjs') --input $translatedManifest --output $generatedPack 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($materializeOutput | Out-String).Trim() }
             $modsRoot = [System.IO.Path]::GetFullPath((Join-Path $ZomboidHome 'mods'))
             $destination = [System.IO.Path]::GetFullPath((Join-Path $modsRoot 'PZAITranslationGenerated'))
@@ -152,7 +155,7 @@ try {
             if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
             New-Item -ItemType Directory -Force -Path $destination | Out-Null
             Copy-Item -Path (Join-Path $generatedPack '*') -Destination $destination -Recurse -Force
-            $exportOutput = & node (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode export --input $translatedManifest --output $reviewCatalog 2>&1
+            $exportOutput = & $nodeExe (Join-Path $PSScriptRoot 'worker\review-b42.cjs') --mode export --input $translatedManifest --output $reviewCatalog 2>&1
             if ($LASTEXITCODE -ne 0) { throw ($exportOutput | Out-String).Trim() }
             $review = Get-Content -LiteralPath $reviewReport -Raw -Encoding utf8 | ConvertFrom-Json
             $packReport = Get-Content -LiteralPath (Join-Path $generatedPack 'pack-report.json') -Raw -Encoding utf8 | ConvertFrom-Json
@@ -175,7 +178,7 @@ try {
         if ($request.action -eq 'test_connection') {
             Write-Status 'running' 'Testing provider with Hello, World!' @{ phase = 'testing'; total = 1; completed = 0; reused = 0; failed = 0; retries = 0; currentMod = '' }
             $testResult = Join-Path $root 'runtime\provider-test-result.json'
-            $testOutput = & node (Join-Path $PSScriptRoot 'worker\test-provider.cjs') --provider $providerJson --target-language $language --output $testResult 2>&1
+            $testOutput = & $nodeExe (Join-Path $PSScriptRoot 'worker\test-provider.cjs') --provider $providerJson --target-language $language --output $testResult 2>&1
             if ($LASTEXITCODE -ne 0) {
                 $testOutput | ForEach-Object { Write-Host $_ }
                 throw ($testOutput | Out-String).Trim()

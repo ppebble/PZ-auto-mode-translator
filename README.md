@@ -24,7 +24,7 @@ A Project Zomboid **Build 42 Stable 42.20.x and later** translation companion. I
 ## Requirements
 
 - Project Zomboid Build 42 Stable 42.20.x or later
-- Node.js 20 LTS or later for the external Helper
+- Windows 10/11 x64 for the external Helper. Its verified Node.js runtime is bundled, so players do not install Node.js separately.
 - Your own provider API key and account. A ChatGPT subscription is not an OpenAI API billing account.
 
 ## Developer setup
@@ -43,7 +43,7 @@ The known game path is `C:\Program Files (x86)\Steam\steamapps\common\ProjectZom
 .\tools\package-helper.ps1 -Version 0.1.0-beta.1
 ```
 
-This creates `dist\PZ-AI-Translator-Helper-0.1.0-beta.1.zip`. The ZIP contains only the helper launcher, workers, default rules, checksums, and an English user README. It never contains API keys, runtime data, or generated translation packs. See [Helper distribution](docs/helper-distribution.md).
+This creates `dist\PZ-AI-Translator-Helper-0.1.0-beta.1.zip`. The ZIP contains the helper launcher, workers, default rules, checksums, and a pinned official Node.js LTS runtime, so players do not install Node.js separately. It never contains API keys, user runtime data, or generated translation packs. See [Helper distribution](docs/helper-distribution.md).
 
 ## Manual scan and translation
 

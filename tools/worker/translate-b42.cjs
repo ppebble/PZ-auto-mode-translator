@@ -68,7 +68,12 @@ function validate(source, target, record = {}) {
 }
 function applyRules(source, record, rules) {
   let value = source; const applied = []; const tags = new Set();
-  const scoped = rule => { const s = rule.scope || {}; return (!s.modId || s.modId === record.modId) && (!s.category || s.category === record.category); };
+  const scoped = rule => {
+    const s = rule.scope || {};
+    return (!s.modId || s.modId === record.modId)
+      && (!s.category || s.category === record.category)
+      && (!s.targetLanguage || s.targetLanguage === rules.targetLanguage);
+  };
   for (const rule of [...(rules.rules || [])].filter(x => x.enabled && scoped(x)).sort((a,b) => (b.priority || 0) - (a.priority || 0))) {
     const requiredAll = Array.isArray(rule.requiresAllTags) ? rule.requiresAllTags : [];
     const requiredAny = Array.isArray(rule.requiresAnyTags) ? rule.requiresAnyTags : [];

@@ -2,8 +2,8 @@
 param(
     [string]$ZomboidHome = (Join-Path $env:USERPROFILE 'Zomboid'),
     [string]$TargetLanguage = 'KO',
-    [string]$Provider = (Join-Path $PSScriptRoot '..\config\provider.local.json'),
-    [string]$Rules = (Join-Path $PSScriptRoot '..\config\rules.example.json'),
+    [string]$Provider = '',
+    [string]$Rules = '',
     [string]$Exclude = 'PZAITranslator,PZAITranslationGenerated',
     [string]$IncludeMods = '',
     [switch]$SkipModsWithTarget,
@@ -21,6 +21,11 @@ $OutputEncoding = $utf8Console
 & chcp.com 65001 | Out-Null
 if ($DryRun -and $Install) { throw '-DryRun output is deliberately not installable.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$Provider = if ([string]::IsNullOrWhiteSpace($Provider)) { Join-Path $root 'config\provider.local.json' } else { $Provider }
+$Rules = if ([string]::IsNullOrWhiteSpace($Rules)) { Join-Path $root 'config\rules.example.json' } else { $Rules }
+$bundledNode = Join-Path $root 'bin\node.exe'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+$nodeExe = if (Test-Path -LiteralPath $bundledNode) { $bundledNode } elseif ($null -ne $nodeCommand) { $nodeCommand.Source } else { throw 'The bundled Node.js runtime is missing. Download and extract the complete Helper ZIP again.' }
 $runtime = Join-Path $root 'runtime'
 $scan = Join-Path $runtime 'scan-manifest.json'
 $translated = Join-Path $runtime 'translated-manifest.json'
@@ -30,7 +35,7 @@ $userRules = Join-Path $ZomboidHome 'Lua\PZAITranslator_rules.ini'
 $reviewCatalog = Join-Path $ZomboidHome 'Lua\PZAITranslator_review.ini'
 
 function Invoke-Worker([string[]]$WorkerArgs) {
-    $workerOutput = & node @WorkerArgs 2>&1
+    $workerOutput = & $nodeExe @WorkerArgs 2>&1
     $workerOutput | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw ($workerOutput | Out-String).Trim() }
 }

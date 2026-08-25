@@ -1,15 +1,24 @@
 Option Explicit
 
 ' Starts the local worker without a visible PowerShell console.
-Dim shell, fso, service, processes, process, root, watcher, command, commandLine, running
+Dim shell, fso, service, processes, process, root, watcher, bundledNode, command, commandLine, running, nodeCheck
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 root = fso.GetParentFolderName(WScript.ScriptFullName)
 watcher = root & "\tools\watch-translation-jobs.ps1"
+bundledNode = root & "\bin\node.exe"
 
 If Not fso.FileExists(watcher) Then
     MsgBox "The tools folder is missing. Extract the entire Helper ZIP before running it.", vbCritical, "PZ AI Translation Generator Helper"
     WScript.Quit 1
+End If
+
+If Not fso.FileExists(bundledNode) Then
+    nodeCheck = shell.Run(shell.ExpandEnvironmentStrings("%ComSpec%") & " /c where node.exe >nul 2>&1", 0, True)
+    If nodeCheck <> 0 Then
+        MsgBox "The bundled runtime is missing. Download and extract the complete Helper ZIP again.", vbCritical, "PZ AI Translation Generator Helper"
+        WScript.Quit 1
+    End If
 End If
 
 Set service = GetObject("winmgmts:\\.\root\cimv2")

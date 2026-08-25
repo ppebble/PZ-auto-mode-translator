@@ -5,7 +5,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { applyRules } = require('../tools/worker/translate-b42.cjs');
 
-const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'rules.example.json'), 'utf8'));
+const rules = { ...JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'rules.example.json'), 'utf8')), targetLanguage: 'KO' };
 const recipe = { modId: '89defender', category: 'Recipes' };
 
 const bumper = applyRules('Make 89 LR Defender Front Bumper', recipe, rules);
@@ -22,6 +22,11 @@ assert.deepStrictEqual(unknown.applied, []);
 
 const wrongCategory = applyRules('Make 89 LR Defender Front Bumper', { ...recipe, category: 'UI' }, rules);
 assert.strictEqual(wrongCategory.value, 'Make 89 LR Defender Front Bumper');
+
+const japaneseRules = { ...rules, targetLanguage: 'JP' };
+const japaneseVehicleRecipe = applyRules('Make 89 LR Defender Front Bumper', recipe, japaneseRules);
+assert.strictEqual(japaneseVehicleRecipe.value, 'Make 89 LR Defender Front Bumper');
+assert.deepStrictEqual(japaneseVehicleRecipe.applied, []);
 
 const banshee = { modId: '65banshee', category: 'Recipes' };
 assert.strictEqual(applyRules('Make 65 Pontiac Banshee Metal Roof', banshee, rules).value, '65 Pontiac Banshee 금속 지붕 제작');

@@ -8,7 +8,8 @@
       "replacement": "89 랜드로버 디펜더",
       "priority": 400,
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -19,7 +20,8 @@
       "replacement": "89 랜드로버 울프",
       "priority": 400,
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -33,7 +35,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -47,7 +50,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -61,7 +65,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -75,7 +80,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -89,7 +95,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -103,7 +110,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -117,7 +125,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -131,7 +140,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -145,7 +155,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -159,7 +170,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -173,7 +185,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -187,7 +200,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -201,7 +215,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -215,7 +230,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -229,7 +245,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -243,7 +260,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -257,7 +275,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -271,7 +290,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -285,7 +305,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -299,7 +320,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -313,7 +335,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -327,7 +350,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -341,7 +365,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -355,7 +380,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -369,7 +395,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -383,7 +410,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {
@@ -397,7 +425,8 @@
         "vehicle-recipe-term"
       ],
       "scope": {
-        "category": "Recipes"
+        "category": "Recipes",
+        "targetLanguage": "KO"
       }
     },
     {

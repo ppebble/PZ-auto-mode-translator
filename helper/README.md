@@ -13,8 +13,8 @@ API keys and translation results remain on each user's PC under `C:\Users\<user>
 ## Requirements
 
 1. Subscribe to and enable **PZ AI Translation Generator** in Steam Workshop.
-2. Install [Node.js 20 LTS or later](https://nodejs.org/). Running `node --version` in PowerShell must show a version number after installation.
-3. Extract this entire ZIP to a writable folder outside Steam and Program Files, for example `C:\Users\<user>\Documents\PZ-Auto-Mode-Translator-Helper`.
+2. Use Windows 10/11 x64. The complete Helper ZIP already includes its verified Node.js runtime; no separate Node.js installation is required.
+3. Extract this entire ZIP to a writable folder outside Steam and Program Files, for example `C:\Users\<user>\Documents\PZ-AI-Translation-Generator-Helper`.
 
 ## Use
 
@@ -31,7 +31,7 @@ Double-click `STOP-TranslationHelper.vbs`. It stops only this helper and never c
 
 ## Troubleshooting
 
-- `failed: node ...`: install Node.js, then start the helper again.
+- `The bundled runtime is missing`: download the Helper ZIP again and extract the entire archive. Do not run the VBS files from inside the ZIP.
 - Stuck at `queued`: start the helper. If it says it is already running, it is ready for requests.
 - Translation, resume, and connection-test buttons stay disabled while a request is queued or running. The Helper claims each job before reading it so a later request cannot overwrite the active request.
 - `429` or `456`: the API provider has rejected the request because of a quota or rate limit. Check that provider's dashboard for the selected project and model.
