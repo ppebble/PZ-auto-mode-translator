@@ -24,6 +24,16 @@ assert.match(lua, /originalClothesAboutToChange\(player, object, optiontype\)/);
 assert.match(lua, /optiontype ~= START_SHOWER_CHANGE/);
 assert.match(lua, /table\.remove\(showerClothes, index\)/);
 assert.match(lua, /player:setWornItem\(item:getBodyLocation\(\), item\)/);
+assert.match(lua, /local LSUseShower = require "TimedActions\/LSUseShower"/);
+assert.match(lua, /local LSUseTub = require "TimedActions\/LSUseTub"/);
+assert.match(lua, /local function hasUnprotectedWornClothing\(player\)/);
+assert.match(lua, /player:isEquippedClothing\(item\)/);
+assert.match(lua, /and not isProtectedItem\(item\)/);
+assert.match(lua, /local function ensureOrdinaryClothesRemoved\(player, object\)/);
+assert.match(lua, /ClothesAboutToChange\(player, object, START_SHOWER_CHANGE\)/);
+assert.match(lua, /function LSUseShower:start\(\)/);
+assert.match(lua, /function LSUseTub:start\(\)/);
+assert.equal((lua.match(/self\.wearClothes = true/g) || []).length, 2);
 
 const originalCall = lua.indexOf("originalClothesAboutToChange(player, object, optiontype)");
 const protectionPass = lua.indexOf("for index = #showerClothes, 1, -1 do");
