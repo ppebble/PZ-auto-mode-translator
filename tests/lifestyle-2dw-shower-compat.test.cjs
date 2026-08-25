@@ -15,8 +15,10 @@ assert.match(modInfo, /^require=LifestyleHobbies,4123567854998$/m);
 
 assert.match(lua, /require "WardrobeChange"/);
 assert.match(lua, /\["tdw:stylehead"\] = true/);
+assert.match(lua, /\["tdw:stylekemono"\] = true/);
 assert.match(lua, /\["tdw:styleskin"\] = true/);
-assert.doesNotMatch(lua, /\["tdw:style(?:kemono|vest|acca|accb|accc|body)"\] = true/);
+assert.doesNotMatch(lua, /\["tdw:style(?:vest|acca|accb|accc|body)"\] = true/);
+assert.match(lua, /location == TDWRegistries\.Styletail/);
 assert.match(lua, /string\.sub\(fullType, 1, 9\) == "Base\.2dw_"/);
 assert.match(lua, /originalClothesAboutToChange\(player, object, optiontype\)/);
 assert.match(lua, /optiontype ~= START_SHOWER_CHANGE/);

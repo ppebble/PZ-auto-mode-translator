@@ -1,7 +1,6 @@
 name=Lifestyle + 2D Wardrobe Shower Compatibility
 id=Lifestyle2DWShowerCompatibility
-description=Keeps 2D Wardrobe face masks and skin adapters equipped while Lifestyle: Hobbies removes ordinary clothes for showers and baths.
+description=Keeps 2D Wardrobe faces, character features, and skin adapters equipped while Lifestyle: Hobbies removes ordinary clothes for showers and baths.
 author=ask13
-modversion=1.0.0
+modversion=1.1.0
 require=LifestyleHobbies,4123567854998
-

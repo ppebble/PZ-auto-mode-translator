@@ -2,10 +2,11 @@ require "WardrobeChange"
 
 local START_SHOWER_CHANGE = "isBathNoLaundryStart"
 
--- These are 2D Wardrobe's character face and skin-adapter body locations.
--- Ordinary 2D Wardrobe clothing and accessories should still be removed.
+-- These are 2D Wardrobe's character face, character-feature, and skin-adapter
+-- body locations. Ordinary 2D Wardrobe clothing and accessories are removed.
 local protectedLocations = {
     ["tdw:stylehead"] = true,
+    ["tdw:stylekemono"] = true,
     ["tdw:styleskin"] = true,
 }
 
@@ -24,7 +25,9 @@ local function isProtectedLocation(location)
     end
 
     if TDWRegistries then
-        if location == TDWRegistries.Stylehair or location == TDWRegistries.Styleskin then
+        if location == TDWRegistries.Stylehair
+            or location == TDWRegistries.Styletail
+            or location == TDWRegistries.Styleskin then
             return true
         end
     end
@@ -73,4 +76,3 @@ if originalClothesAboutToChange and not Lifestyle2DWShowerCompatibilityInstalled
         end
     end
 end
-
