@@ -1,0 +1,7 @@
+name=2D Wardrobe Skin Adapter Fix
+id=2DWSkinAdapterFix
+description=Converts broken 2D Wardrobe skin-adapter equipment into the matching native VSGirlBody skin tone without rendering the broken XML mask item.
+author=ask13
+modversion=1.0.0
+require=42_VSGirlBodySFW,4123567854998
+
