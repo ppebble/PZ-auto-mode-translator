@@ -124,6 +124,9 @@ try {
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'translate-b42.cjs'), '--manifest', output, '--rules', path.join(__dirname, '..', 'config', 'rules.example.json'), '--output', translated, '--dry-run'], { stdio: 'pipe' });
   const legacyPack = path.join(root, 'legacy-pack');
   execFileSync(process.execPath, [path.join(__dirname, '..', 'tools', 'worker', 'materialize-b42.cjs'), '--input', translated, '--output', legacyPack, '--allow-dry-run'], { stdio: 'pipe' });
+  const generatedModInfo = fs.readFileSync(path.join(legacyPack, 'common', 'mod.info'), 'utf8');
+  assert.match(generatedModInfo, /^name=PZ AI Generated Translation \(KO\)$/m);
+  assert.match(generatedModInfo, /^id=PZAITranslationGenerated$/m);
   assert.match(fs.readFileSync(path.join(legacyPack, 'common', 'media', 'lua', 'shared', 'Translate', 'KO', 'IG_UI_KO.txt'), 'utf8'), /IGUI_VehicleNameLegacy = "\[DRY-RUN KO\] 89 LAND ROVER Defender",/);
 
   mod('DualFormat', { EN: { duplicate: 'JSON wins' } });

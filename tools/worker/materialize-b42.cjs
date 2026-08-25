@@ -69,7 +69,7 @@ for (const { category, sourceFormat, legacyTable, map } of values.values()) {
   else writeUtf8(file, JSON.stringify(Object.fromEntries(ordered.map(([key, record]) => [key, record.target])), null, 2) + '\n');
   files++; keys += map.size;
 }
-const packName = 'PZ Auto Mode ' + languageName + ' Translation Pack';
+const packName = 'PZ AI Generated Translation (' + data.targetLanguage + ')';
 writeUtf8(path.join(output, 'common', 'mod.info'), 'name=' + packName + '\nid=' + packId + '\ndescription=Generated B42.20+ ' + languageName + ' translations (' + keys + ' entries).\n');
 const report = { schema: 'pzat-pack-v1', packName, sourceMode: data.mode || 'unknown', targetLanguage: data.targetLanguage, output, files, keys, conflicts };
 writeUtf8(path.join(output, 'pack-report.json'), JSON.stringify(report, null, 2) + '\n');
