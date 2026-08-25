@@ -3,4 +3,5 @@ id=Lifestyle2DWShowerCompatibility
 description=Keeps 2D Wardrobe faces, character features, and skin adapters equipped while Lifestyle: Hobbies removes ordinary clothes for showers and baths.
 author=ask13
 modversion=1.2.0
+poster=poster.png
 require=LifestyleHobbies,4123567854998

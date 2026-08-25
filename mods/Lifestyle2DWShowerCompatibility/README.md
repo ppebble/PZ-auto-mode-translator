@@ -15,6 +15,19 @@ removed and restored by Lifestyle as usual.
 
 The Workshop/source copies of both dependencies are left unchanged.
 
+## Installation and load order
+
+Subscribe to and enable both required mods, then enable this compatibility
+patch. Keep it after Lifestyle: Hobbies and 2Dimension Wardrobe in the mod
+list. The dependency declaration also prevents the patch from loading without
+either required mod.
+
+## Workshop publication
+
+Published with permission from the 2Dimension Wardrobe author. This package
+contains only the compatibility patch; it does not redistribute files from
+Lifestyle: Hobbies or 2Dimension Wardrobe.
+
 The patch also handles a Lifestyle precheck mismatch: some equipped clothing
 can have no current `ClothingItem`, causing Lifestyle to skip its clothing
 change action entirely. At the beginning of a shower or bath, this mod invokes
