@@ -53,6 +53,7 @@ function loadUserRules(file) {
     scope: {
       ...(record.modId ? { modId: record.modId } : {}),
       ...(record.category ? { category: record.category } : {}),
+      ...(record.targetLanguage ? { targetLanguage: record.targetLanguage } : {}),
     },
     userDefined: true,
   }));
