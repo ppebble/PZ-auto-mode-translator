@@ -9,7 +9,7 @@ const runner = read('tools/run-translation.ps1');
 const packager = read('tools/package-helper.ps1');
 const launcher = read('helper/START-TranslationHelper.vbs');
 const helperReadme = read('helper/README.md');
-const workshop = read('docs/workshop-description-ko.txt');
+const workshop = read('docs/workshop-description-en.txt');
 
 for (const source of [watcher, runner]) {
   assert.match(source, /bin\\node\.exe/, 'Helper PowerShell must prefer the bundled Node runtime');
@@ -22,7 +22,7 @@ assert.match(packager, /licenses\\NODEJS-LICENSE\.txt/, 'Node redistribution lic
 assert.match(launcher, /\\bin\\node\.exe/, 'the launcher must detect an incomplete Helper archive');
 assert.doesNotMatch(helperReadme, /Install .*Node\.js|Node\.js 20 LTS/, 'players must not be instructed to install Node.js');
 assert.match(helperReadme, /no separate Node\.js installation is required/, 'Helper instructions must explain the bundled runtime');
-assert.doesNotMatch(workshop, /Node\.js 20 LTS 이상/, 'Workshop requirements must not ask players to install Node.js');
-assert.match(workshop, /Node\.js를 따로 설치할 필요가 없습니다/, 'Workshop copy must explain that the Helper is self-contained');
+assert.doesNotMatch(workshop, /install Node\.js/i, 'Workshop requirements must not ask players to install Node.js');
+assert.match(workshop, /No separate Node\.js installation is required/, 'Workshop copy must explain that the Helper is self-contained');
 
 console.log('helper runtime packaging test passed');

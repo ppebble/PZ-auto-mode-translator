@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
-const descriptionPath = path.join(repoRoot, 'docs', 'workshop-description-ko.txt');
+const descriptionPath = path.join(repoRoot, 'docs', 'workshop-description-en.txt');
 const workshopRoot = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.join(process.env.USERPROFILE || '', 'Zomboid', 'Workshop', 'PZAITranslationGenerator');

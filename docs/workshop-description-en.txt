@@ -1,0 +1,124 @@
+[h1]PZ AI Translation Generator[/h1]
+
+[b]AI translation-pack generator for Project Zomboid Build 42.20.x+[/b]
+
+[b]This mod does not retranslate every enabled mod.[/b]
+
+It first checks the source mod, your active translation packs, and previously saved translations. Anything that already has a translation is skipped. Only pending strings are sent to your selected AI service.
+
+Completed translations are written to a separate local mod named [b]PZAITranslationGenerated[/b].
+
+[b]Supported AI services[/b]
+Gemini | DeepL | OpenAI | Claude | DeepSeek | Yandex | OpenAI-compatible
+
+[hr][/hr]
+
+[h2]Key Features[/h2]
+[list]
+[*][b]Translates only what is missing[/b] - Existing translations are skipped.
+[*][b]Preserves existing translations[/b] - The source mod and active translation packs take priority.
+[*][b]Per-mod selection[/b] - You choose which mods to translate.
+[*][b]Pause and resume[/b] - Finished work is kept, and only the remaining strings are processed.
+[*][b]Review and correction[/b] - Inspect and edit generated translations from inside the game.
+[*][b]Conflict protection[/b] - Conflicting keys from different mods are excluded instead of being overwritten arbitrarily.
+[*][b]Original files stay untouched[/b] - Never edits Workshop mods or game files.
+[/list]
+
+[hr][/hr]
+
+[h2]Requirements[/h2]
+[list]
+[*]Project Zomboid [b]Build 42.20.x or later[/b]
+[*]An API key issued directly by a supported AI service
+[*][url=https://github.com/ppebble/PZ-auto-mode-translator/releases/latest][b]Latest Translation Helper release[/b][/url]
+[/list]
+
+[b]Important:[/b] Steam Workshop mods cannot make internet requests or launch external programs. Translation Helper must therefore be downloaded and run separately.
+
+The Helper ZIP includes its own runtime. [b]No separate Node.js installation is required.[/b] Translation Helper and your API key are not included in the Steam Workshop mod.
+
+[hr][/hr]
+
+[h2]How to Use[/h2]
+
+[h3]1. First-time setup and first translation[/h3]
+[olist]
+[*]Subscribe to this mod and enable [b]PZ AI Translation Generator[/b].
+[*]Download the Helper ZIP from the link above and extract it outside Steam and Program Files.
+[*]Run [b]START-TranslationHelper.vbs[/b].
+[*]Open [b]Options > Mods > PZ AI Translation Generator[/b]. Select the AI service, model, API key, and target language, then click [b]Apply[/b].
+[*]Open the [b]AI Translation Generator[/b] tab in the Character Info window and use [b]Test API: Hello, World![/b] to verify the connection.
+[*]Open [b]Manage translation targets[/b], select the mods you want to translate, and save the selection.
+[*]For the first job, click [b]Start new translation[/b] once.
+[*]When the status shows [b]Complete[/b], enable [b]PZAITranslationGenerated[/b].
+[*]To load the generated translations, return to the main menu and re-enter the world. Restart the game if they still do not appear.
+[/olist]
+
+[h3]2. Use Resume for later work[/h3]
+
+After the first translation, you normally do not need to use [b]Start new translation[/b] again.
+
+Run the Helper, change your translation targets or AI settings if needed, and click [b]Resume interrupted translation[/b]. The generator reuses completed translations and saved records first, then processes only strings that are still missing.
+
+Use Resume after pausing, restarting the game or Helper, adding a new mod, changing the AI service or model, or receiving HTTP 429 / 456 errors.
+
+[b]Note:[/b] A default wait of [b]70 seconds between requests[/b] may be applied to protect free-tier API quotas. You can keep playing while Translation Helper continues working in the background.
+
+[hr][/hr]
+
+[h2]Review and Correct Translations[/h2]
+
+Open [b]Options > Mods > PZ AI Translation Generator > Quality tools[/b] to inspect and edit generated translations.
+
+[list]
+[*][b]Review generated translations[/b] - Review and edit individual entries.
+[*][b]Bulk correct translations[/b] - Preview and replace repeated mistranslations.
+[*][b]Confirm all N[/b] - Confirm once more before applying all N matching entries.
+[*][b]Review hardcoded Lua strings[/b] - Review candidate text written directly in Lua code.
+[/list]
+
+The hardcoded-string scanner does not modify source files or automatically send those strings to an API. Some hardcoded text may require a separate compatibility patch.
+
+[hr][/hr]
+
+[h2]Frequently Asked Questions[/h2]
+
+[h3]Is Translation Helper safe?[/h3]
+
+You can inspect the Helper's VBS, PowerShell, and JavaScript source files inside the ZIP.
+
+[list]
+[*][b]No separate Node.js installation[/b] - Includes the official Node.js LTS Windows x64 runtime.
+[*][b]No npm dependencies[/b] - Uses only built-in Node.js functionality.
+[*][b]Original files stay untouched[/b] - Does not modify source mods.
+[*][b]No unnecessary communication[/b] - No automatic updater or telemetry.
+[*][b]Verifiable files[/b] - A ZIP SHA-256 and internal [b]SHA256SUMS.txt[/b] are provided.
+[/list]
+
+The current beta is [b]not digitally signed for Windows[/b], so SmartScreen or antivirus software may display a warning.
+
+Your API key is stored on your own PC. Use a dedicated key with a spending or usage limit when possible, and use trusted HTTPS endpoints only for Custom/OpenAI-compatible services.
+
+[h3]What text is sent to the AI service?[/h3]
+
+The generator first checks the source mod, active translation packs, and previously saved translations. [b]Only pending strings with no translation anywhere are sent to the selected AI service.[/b] It does not resend every string on every run.
+
+[hr][/hr]
+
+[h2]Troubleshooting[/h2]
+[list]
+[*][b]Queued[/b] - Make sure Translation Helper is running.
+[*][b]No API key is saved[/b] - Enter the API key and click Apply.
+[*][b]HTTP 401 / 403[/b] - Check the key and access permission for the selected model.
+[*][b]HTTP 429 / 456[/b] - Check the AI service quota and use Resume later.
+[*][b]Conflicts N[/b] - Multiple mods use the same translation key differently, so those entries were excluded.
+[*][b]Some English text remains[/b] - Check that the generated mod is enabled, verify translation-pack priority, and restart the game. Hardcoded Lua strings are not automatic translation targets.
+[/list]
+
+The API key and Helper are not included in the Steam Workshop download. API keys, job records, and generated translations remain on your PC.
+
+[hr][/hr]
+
+[h2]Stopping Translation Helper[/h2]
+
+Translation Helper may continue running after the game closes. When you are finished, run [b]STOP-TranslationHelper.vbs[/b] from the Helper folder.
