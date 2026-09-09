@@ -122,3 +122,9 @@ The API key and Helper are not included in the Steam Workshop download. API keys
 [h2]Stopping Translation Helper[/h2]
 
 Translation Helper may continue running after the game closes. When you are finished, run [b]STOP-TranslationHelper.vbs[/b] from the Helper folder.
+
+[hr][/hr]
+
+[h2]More Project Zomboid Mods by ask13[/h2]
+
+Browse other focused Build 42 tools and compatibility mods in the [url=https://github.com/ppebble/project-zomboid-modding]Project Zomboid Mods & Tools catalog[/url].

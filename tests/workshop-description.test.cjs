@@ -24,6 +24,8 @@ assert.match(description, /\[h2\]Frequently Asked Questions\[\/h2\]/, 'Workshop 
 assert.ok(description.indexOf('[h3]Is Translation Helper safe?[/h3]') < description.indexOf('[h3]What text is sent to the AI service?[/h3]'), 'Workshop FAQs must keep safety before provider-data scope');
 assert.match(description, /After the first translation, you normally do not need to use \[b\]Start new translation\[\/b\] again/, 'Workshop copy must direct later runs to Resume');
 assert.ok(description.indexOf('[h3]1. First-time setup and first translation[/h3]') < description.indexOf('[h3]2. Use Resume for later work[/h3]'), 'Workshop usage must explain first-run setup before later resume');
+assert.match(description, /\[h2\]More Project Zomboid Mods by ask13\[\/h2\]/, 'Workshop copy must include the shared creator-mod section');
+assert.match(description, /https:\/\/github\.com\/ppebble\/project-zomboid-modding/, 'Creator-mod section must link to the maintained catalog');
 assert.doesNotMatch(description, /^\[\]/m, 'Steam list items must use [*], not []');
 assert.ok(Buffer.byteLength(description, 'utf8') <= 8000, 'Steam Workshop description must remain within the 8,000-byte UTF-8 limit');
 
